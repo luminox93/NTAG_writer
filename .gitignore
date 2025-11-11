@@ -1,0 +1,33 @@
+# Gradle
+.gradle/
+build/
+gradle-app.setting
+!gradle-wrapper.jar
+!gradle-wrapper.properties
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+*.swp
+*.swo
+
+# Java
+*.class
+*.log
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+hs_err_pid*
+
+# Resources (sensitive config)
+resources/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Output
+out/
+bin/
