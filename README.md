@@ -111,38 +111,42 @@ NTAG424 칩셋의 빠르고 정확한 설정을 위한 **자동화 프로그래�
 ```
 ntag-writer/
 ├── src/main/java/ntagwriter/
-│   ├── NtagWriterApplication.java  # 메인 진입점
-│   ├── domain/                     # 도메인 모델
+│   ├── NtagWriterApplication.java      # 메인 진입점
+│   ├── domain/                         # 도메인 모델
 │   │   ├── Tag.java
 │   │   ├── TagStatus.java
 │   │   ├── SdmConfig.java
-│   │   └── ProgrammingResult.java
-│   ├── service/                    # 비즈니스 로직
+│   │   ├── ProgrammingResult.java
+│   │   └── SetupStep.java              # 자동 설정 단계 enum
+│   ├── service/                        # 비즈니스 로직
 │   │   ├── NfcReaderService.java
+│   │   ├── Ntag424SetupService.java    # NTAG424 자동 설정 서비스
 │   │   ├── TagProgrammingService.java
 │   │   ├── CryptoService.java
 │   │   └── ApiService.java
-│   ├── ui/                         # JavaFX UI
+│   ├── ui/                             # JavaFX UI (추후)
 │   │   ├── MainController.java
 │   │   ├── ConfigController.java
 │   │   └── BatchController.java
-│   ├── repository/                 # 데이터 접근
+│   ├── repository/                     # 데이터 접근 (추후)
 │   │   └── ProgrammingHistoryRepository.java
-│   ├── crypto/                     # 암호화 유틸
+│   ├── crypto/                         # 암호화 유틸
 │   │   ├── CmacCalculator.java
 │   │   └── AesEncryption.java
-│   ├── reader/                     # NFC 리더기 전략 (확장 가능)
-│   │   ├── NfcReaderStrategy.java      # 리더기 인터페이스
-│   │   ├── IdentivReader.java          # identiv uTrust 3700 F 구현체
-│   │   ├── ACR122UReader.java          # ACR122U 구현체 (호환성)
+│   ├── reader/                         # NFC 리더기 전략 (확장 가능)
+│   │   ├── NfcReaderStrategy.java          # 리더기 인터페이스
+│   │   ├── IdentivReader.java              # identiv uTrust 3700 F 구현체
+│   │   ├── ACR122UReader.java              # ACR122U 구현체 (호환성)
+│   │   ├── ReaderException.java            # 리더기 예외
 │   │   └── (추후 PN532Reader.java 등 추가 예정)
-│   └── util/                       # 유틸리티
+│   └── util/                           # 유틸리티
 │       ├── HexUtils.java
-│       └── ApduCommand.java
+│       ├── ApduCommand.java
+│       └── ConsoleHelper.java          # 대화형 콘솔 UI 헬퍼
 ├── src/main/resources/
-│   ├── fxml/                       # JavaFX FXML
-│   └── config/                     # 설정 파일
-└── src/test/java/ntagwriter/       # 테스트
+│   ├── fxml/                           # JavaFX FXML (추후)
+│   └── config/                         # 설정 파일
+└── src/test/java/ntagwriter/           # 테스트
 ```
 
 ---
@@ -244,6 +248,163 @@ java -jar build/libs/ntag-writer.jar
 ---
 
 ## 사용 방법
+
+### 모드 선택
+
+프로그램 실행 시 두 가지 모드 중 선택할 수 있습니다:
+
+```bash
+./gradlew run
+```
+
+**1. 간단 테스트 모드** (모드 1)
+- 리더기 연결 및 태그 UID 읽기
+- 빠른 동작 확인용
+
+**2. NTAG424 자동 설정 모드** (모드 2)
+- 단계별 대화형 태그 설정
+- 전체 SDM 설정 자동화
+
+---
+
+### NTAG424 자동 설정 모드 사용법
+
+모드 2를 선택하면 다음 8단계가 순차적으로 진행됩니다:
+
+#### [단계 1] 리더기 연결
+- NFC 리더기 자동 검색 및 연결
+- 태그를 리더기에 올리도록 안내
+
+#### [단계 2] 태그 UID 읽기
+- 태그의 고유 식별자(UID) 읽기
+- UID 정보 표시
+
+#### [단계 3] 애플리케이션 선택
+- NTAG424 DNA 애플리케이션 선택 (AID: D2760000850101)
+- 태그 인식 확인
+
+#### [단계 4] 기본 키 인증
+- 공장 초기화 상태의 기본 키(00...00)로 인증
+- EV2 인증 프로토콜 수행
+
+#### [단계 5] SDM 설정
+- **Base URL 입력**: 서버 검증 URL 입력 (예: https://yourdomain.com/verify)
+- **AES 키 생성/입력**:
+  - 자동 생성 (권장): 안전한 16바이트 랜덤 키 생성
+  - 수동 입력: 기존 키 사용 (32자리 16진수)
+- **SDM 오프셋 자동 계산**: PICC Data, CMAC 위치 자동 계산
+- **중요**: 생성된 AES 키는 반드시 안전하게 보관하세요!
+
+#### [단계 6] 보안 키 변경
+- 기본 키를 새로운 AES 키로 변경
+- 태그 보안 활성화
+
+#### [단계 7] 설정 검증
+- 모든 설정 확인
+- 설정 정보 요약 표시
+- 중요 정보 백업 안내
+
+#### [단계 8] 완료
+- 최종 URL 형식 안내
+- 예상 출력: `https://yourdomain.com/verify?p=<32자리>&c=<16자리>`
+- 태그 제거 가능
+
+---
+
+### 대화형 진행 방식
+
+각 단계마다:
+1. **단계 설명**: 현재 단계에서 무엇을 할지 설명
+2. **진행 확인**: "이 단계를 진행하시겠습니까? (y/n)" 질문
+3. **실행**: 사용자가 'y' 입력 시 해당 단계 실행
+4. **결과 표시**: 성공/실패 여부 및 상세 정보 표시
+5. **오류 처리**: 실패 시 재시도 또는 중단 선택 가능
+
+---
+
+### 사용 예시
+
+```
+=============================================================
+ NTAG424 DNA 태그 자동 설정
+=============================================================
+ℹ 이 프로세스는 NTAG424 태그를 안전하게 설정합니다.
+⚠ 진행 중에는 태그를 리더기에서 떼지 마세요!
+
+설정을 시작하시겠습니까? (y/n): y
+
+------------------------------------------------------------
+[단계 1] 리더기 연결
+------------------------------------------------------------
+ℹ NFC 리더기를 연결하고 태그를 인식합니다.
+
+이 단계를 진행하시겠습니까? (y/n): y
+→ 리더기를 검색하고 연결 중...
+✓ 리더기 연결됨: identiv uTrust 3700 F Contact Reader
+ℹ 태그를 리더기에 올려주세요.
+✓ 리더기 연결 완료!
+
+------------------------------------------------------------
+[단계 2] 태그 UID 읽기
+------------------------------------------------------------
+ℹ 태그의 고유 식별자(UID)를 읽습니다.
+
+이 단계를 진행하시겠습니까? (y/n): y
+→ 태그 UID를 읽는 중...
+✓ UID: 04E5A1B2C3D4E5
+✓ 태그 UID 읽기 완료!
+
+...
+
+------------------------------------------------------------
+[단계 5] SDM 설정
+------------------------------------------------------------
+ℹ Secure Dynamic Messaging 파라미터를 설정합니다.
+
+이 단계를 진행하시겠습니까? (y/n): y
+→ SDM 파라미터 설정 중...
+
+ℹ SDM을 설정하기 위해 Base URL이 필요합니다.
+ℹ 예: https://yourdomain.com/verify
+
+Base URL을 입력하세요: https://myserver.com/api/verify
+
+ℹ SDM 오프셋 계산:
+ℹ   - PICC Data Offset: 35
+ℹ   - CMAC Offset: 70
+ℹ   - CMAC Input Offset: 70
+
+새로운 AES 키를 자동 생성하시겠습니까? (y/n): y
+✓ AES 키 생성됨: 1A2B3C4D5E6F7A8B9C0D1E2F3A4B5C6D
+⚠ ⚠ 이 키를 안전하게 보관하세요! 분실 시 태그를 사용할 수 없습니다.
+✓ SDM 설정 완료!
+
+...
+
+=============================================================
+ 설정 완료!
+=============================================================
+✓ NTAG424 태그가 성공적으로 설정되었습니다.
+
+ℹ 예상 URL 형식:
+ℹ https://myserver.com/api/verify?p=<32자리 PICC 데이터>&c=<16자리 CMAC>
+
+ℹ 이제 태그를 NFC 리더기에서 제거해도 됩니다.
+ℹ 설정된 태그를 스마트폰으로 태핑하면 위 URL로 리다이렉트됩니다.
+
+=============================================================
+ 설정 요약
+=============================================================
+ℹ 태그 UID: 04E5A1B2C3D4E5
+ℹ Base URL: https://myserver.com/api/verify
+ℹ AES 키: 1A2B3C4D5E6F7A8B9C0D1E2F3A4B5C6D
+
+⚠ 이 정보를 안전한 곳에 저장하세요!
+```
+
+---
+
+### 일반 프로그래밍 사용법 (추후 GUI)
 
 1. **리더기 연결**
    - NFC 리더기를 PC에 연결
