@@ -27,7 +27,7 @@ NTAG424 칩셋의 빠르고 정확한 설정을 위한 **자동화 프로그래�
 - ✅ 설정 오류 최소화
 - ✅ 프로그래밍 이력 관리
 - ✅ 배치 프로그래밍 지원 (대량 태그 처리)
-- ✅ 확장 가능한 리더기 지원 (ACR122U 기반 → 다른 리더기 추가 가능)
+- ✅ 확장 가능한 리더기 지원 (identiv uTrust 3700 F 기반 → 다른 리더기 추가 가능)
 
 ### 2단계: GUI 개발 (추후)
 - ✅ JavaFX 기반 GUI 인터페이스 구현
@@ -48,7 +48,7 @@ NTAG424 칩셋의 빠르고 정확한 설정을 위한 **자동화 프로그래�
 - **NFC 통신 경험 부족** - 저수준 하드웨어 통신 처음 다뤄봄
 - **APDU 명령어** - 스마트카드 통신 프로토콜 학습
 - **PC/SC API** - javax.smartcardio 라이브러리 사용
-- **ACR122U 리더기** - 특정 하드웨어 제어 및 드라이버 연동
+- **identiv uTrust 3700 F 리더기** - NTAG424 DNA 호환 리더기 제어
 
 ### 3. 암호화 알고리즘
 - **AES-CMAC 구현** - 보안 인증 메커니즘 직접 구현
@@ -68,8 +68,8 @@ NTAG424 칩셋의 빠르고 정확한 설정을 위한 **자동화 프로그래�
 
 ### 2. 확장 가능한 설계
 - **전략 패턴** 활용 - 다양한 NFC 리더기 지원
-  - 현재: ACR122U 기반으로 개발
-  - 추후: PN532, PN7150 등 NTAG424 호환 리더기 추가 가능
+  - 현재: identiv uTrust 3700 F 기반으로 개발
+  - 추후: ACR122U, PN532, PN7150 등 다른 리더기 추가 가능
   - 인터페이스 기반 설계로 새 리더기 추가 시 기존 코드 수정 최소화
 - **계층형 아키텍처** - UI, Service, Repository 분리
 - **SOLID 원칙** 적용 (특히 OCP - 개방-폐쇄 원칙)
@@ -133,7 +133,8 @@ ntag-writer/
 │   │   └── AesEncryption.java
 │   ├── reader/                     # NFC 리더기 전략 (확장 가능)
 │   │   ├── NfcReaderStrategy.java      # 리더기 인터페이스
-│   │   ├── ACR122UReader.java          # ACR122U 구현체
+│   │   ├── IdentivReader.java          # identiv uTrust 3700 F 구현체
+│   │   ├── ACR122UReader.java          # ACR122U 구현체 (호환성)
 │   │   └── (추후 PN532Reader.java 등 추가 예정)
 │   └── util/                       # 유틸리티
 │       ├── HexUtils.java
@@ -149,7 +150,7 @@ ntag-writer/
 ## NFC 리더기 지원 전략
 
 ### 현재 지원
-- **ACR122U** - 보유 중인 리더기 기반으로 개발 및 테스트
+- **identiv uTrust 3700 F** - NTAG424 DNA 완벽 지원 리더기
 
 ### 확장성 설계
 전략 패턴(Strategy Pattern)을 활용하여 다양한 리더기를 지원할 수 있도록 설계:
@@ -163,7 +164,12 @@ public interface NfcReaderStrategy {
     void disconnect();
 }
 
-// ACR122U 구현체
+// identiv uTrust 3700 F 구현체
+public class IdentivReader implements NfcReaderStrategy {
+    // identiv 전용 구현
+}
+
+// ACR122U 구현체 (호환성)
 public class ACR122UReader implements NfcReaderStrategy {
     // ACR122U 전용 구현
 }
@@ -200,8 +206,8 @@ public class PN532Reader implements NfcReaderStrategy {
 
 ### 4. 확장 가능한 리더기 지원
 - 전략 패턴으로 다양한 리더기 지원
-- 현재: ACR122U
-- 추후 확장 가능: PN532, PN7150 등
+- 현재: identiv uTrust 3700 F
+- 추후 확장 가능: ACR122U, PN532, PN7150 등
 
 ### 5. 보안 관리
 - AES 키 암호화 저장
@@ -214,7 +220,7 @@ public class PN532Reader implements NfcReaderStrategy {
 
 ### 필수 요구사항
 - **Java 8 이상** (Java 8, 11, 17, 21 모두 지원)
-- **NFC 리더기** (ACR122U 권장)
+- **NFC 리더기** (identiv uTrust 3700 F 권장)
 - **NTAG424 DNA 태그**
 
 ### 설치 및 실행

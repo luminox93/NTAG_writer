@@ -148,6 +148,18 @@ class PN532Reader implements NfcReaderStrategy { ... }  // 나중에 추가
 - 나중에 다른 리더기 추가하고 싶으면 구현체만 추가하면 됨
 - 코드 수정 최소화 (OCP 원칙)
 
+### 리더기 변경 로그
+
+**2025-11-18**
+- ACR122U → ACR1252로 변경 시도
+- 문제 발견: ACR1252가 NTAG424 DNA 지원 안 됨 (ISO 14443-4 제한적)
+- 최종 결정: **identiv uTrust 3700 F CL Reader**로 변경
+  - NTAG424 DNA 완벽 지원 확인
+  - ISO 14443 Type A/B 지원
+  - PC/SC 표준 호환
+- 전략 패턴으로 설계했기 때문에 IdentivReader 클래스만 추가하면 됨
+- ACR122UReader는 호환성을 위해 유지
+
 ---
 
 ## 프로젝트 구조 대충
