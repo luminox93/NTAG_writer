@@ -24,6 +24,9 @@ hs_err_pid*
 # Resources (sensitive config)
 resources/
 
+# Docs (internal specs)
+docs/ntag_todo.md
+
 # OS
 .DS_Store
 Thumbs.db
