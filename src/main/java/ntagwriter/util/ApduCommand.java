@@ -21,6 +21,7 @@ public class ApduCommand {
     public static final byte INS_AUTHENTICATE_EV2_NON_FIRST = (byte) 0x77;
     public static final byte INS_CHANGE_FILE_SETTINGS = (byte) 0x5F;
     public static final byte INS_CHANGE_KEY = (byte) 0xC4;
+    public static final byte INS_WRITE_DATA = (byte) 0x8D;
     public static final byte INS_GET_VERSION = (byte) 0x60;
     public static final byte INS_GET_CARD_UID = (byte) 0x51;
 
@@ -122,6 +123,144 @@ public class ApduCommand {
      */
     public static byte[] getCardUid() {
         return new byte[]{CLA_PROPRIETARY, INS_GET_CARD_UID, 0x00, 0x00, 0x00};
+    }
+
+    /**
+     * NTAG424 CHANGE KEY 명령어 생성 (CommMode.FULL)
+     * AN12196 Section 5.16 참조
+     *
+     * @param keyNo        변경할 키 번호
+     * @param encryptedKeyData 암호화된 키 데이터 (KeyData를 KSesAuthENC로 암호화한 값)
+     * @param mac          CMAC 값 (8 bytes, MACt)
+     * @return APDU 명령어 바이트 배열
+     */
+    public static byte[] changeKey(byte keyNo, byte[] encryptedKeyData, byte[] mac) {
+        // APDU 구조: CLA INS P1 P2 Lc KeyNo EncData MACt Le
+        int dataLen = 1 + encryptedKeyData.length + mac.length;
+        byte[] apdu = new byte[5 + dataLen + 1];
+
+        apdu[0] = CLA_PROPRIETARY;  // 90
+        apdu[1] = INS_CHANGE_KEY;    // C4
+        apdu[2] = 0x00;              // P1
+        apdu[3] = 0x00;              // P2
+        apdu[4] = (byte) dataLen;    // Lc
+
+        int offset = 5;
+        apdu[offset++] = keyNo;
+        System.arraycopy(encryptedKeyData, 0, apdu, offset, encryptedKeyData.length);
+        offset += encryptedKeyData.length;
+        System.arraycopy(mac, 0, apdu, offset, mac.length);
+        offset += mac.length;
+
+        apdu[offset] = 0x00;  // Le
+
+        return apdu;
+    }
+
+    /**
+     * NTAG424 CHANGE FILE SETTINGS 명령어 생성 (CommMode.FULL)
+     * AN12196 Section 5.9, Table 18 참조
+     *
+     * @param fileNo       파일 번호
+     * @param encryptedSettings 암호화된 파일 설정 데이터
+     * @param mac          CMAC 값 (8 bytes, MACt)
+     * @return APDU 명령어 바이트 배열
+     */
+    public static byte[] changeFileSettings(byte fileNo, byte[] encryptedSettings, byte[] mac) {
+        // APDU 구조: CLA INS P1 P2 Lc FileNo EncSettings MACt Le
+        int dataLen = 1 + encryptedSettings.length + mac.length;
+        byte[] apdu = new byte[5 + dataLen + 1];
+
+        apdu[0] = CLA_PROPRIETARY;        // 90
+        apdu[1] = INS_CHANGE_FILE_SETTINGS; // 5F
+        apdu[2] = 0x00;                    // P1
+        apdu[3] = 0x00;                    // P2
+        apdu[4] = (byte) dataLen;          // Lc
+
+        int offset = 5;
+        apdu[offset++] = fileNo;
+        System.arraycopy(encryptedSettings, 0, apdu, offset, encryptedSettings.length);
+        offset += encryptedSettings.length;
+        System.arraycopy(mac, 0, apdu, offset, mac.length);
+        offset += mac.length;
+
+        apdu[offset] = 0x00;  // Le
+
+        return apdu;
+    }
+
+    /**
+     * NTAG424 WRITE DATA 명령어 생성 (CommMode.FULL)
+     * AN12196 Section 5.8.2, Table 17 참조
+     *
+     * @param fileNo       파일 번호
+     * @param offset       쓰기 시작 오프셋 (3 bytes, little-endian)
+     * @param length       데이터 길이 (3 bytes, little-endian)
+     * @param encryptedData 암호화된 데이터
+     * @param mac          CMAC 값 (8 bytes, MACt)
+     * @return APDU 명령어 바이트 배열
+     */
+    public static byte[] writeDataFull(byte fileNo, int offset, int length, byte[] encryptedData, byte[] mac) {
+        // APDU 구조: CLA INS P1 P2 Lc FileNo Offset(3) Length(3) EncData MACt Le
+        int headerLen = 1 + 3 + 3; // FileNo + Offset + Length
+        int dataLen = headerLen + encryptedData.length + mac.length;
+        byte[] apdu = new byte[5 + dataLen + 1];
+
+        apdu[0] = CLA_PROPRIETARY;  // 90
+        apdu[1] = INS_WRITE_DATA;   // 8D
+        apdu[2] = 0x00;             // P1
+        apdu[3] = 0x00;             // P2
+        apdu[4] = (byte) dataLen;   // Lc
+
+        int idx = 5;
+        apdu[idx++] = fileNo;
+
+        // Offset (3 bytes, little-endian)
+        apdu[idx++] = (byte) (offset & 0xFF);
+        apdu[idx++] = (byte) ((offset >> 8) & 0xFF);
+        apdu[idx++] = (byte) ((offset >> 16) & 0xFF);
+
+        // Length (3 bytes, little-endian)
+        apdu[idx++] = (byte) (length & 0xFF);
+        apdu[idx++] = (byte) ((length >> 8) & 0xFF);
+        apdu[idx++] = (byte) ((length >> 16) & 0xFF);
+
+        // Encrypted Data
+        System.arraycopy(encryptedData, 0, apdu, idx, encryptedData.length);
+        idx += encryptedData.length;
+
+        // MAC
+        System.arraycopy(mac, 0, apdu, idx, mac.length);
+        idx += mac.length;
+
+        apdu[idx] = 0x00;  // Le
+
+        return apdu;
+    }
+
+    /**
+     * NTAG424 WRITE DATA 명령어 생성 (CommMode.PLAIN)
+     * AN12196 Section 5.8.1, Table 16 참조 (ISOUpdateBinary 사용)
+     *
+     * @param fileNo       파일 번호
+     * @param offset       쓰기 시작 오프셋
+     * @param data         쓸 데이터 (평문)
+     * @return APDU 명령어 바이트 배열
+     */
+    public static byte[] writeDataPlain(byte fileNo, int offset, byte[] data) {
+        // CommMode.PLAIN에서는 ISOUpdateBinary 사용
+        // P1에 파일 번호를 OR
+        byte[] apdu = new byte[5 + data.length];
+
+        apdu[0] = CLA_ISO;              // 00
+        apdu[1] = INS_UPDATE_BINARY;    // D6
+        apdu[2] = (byte) (0x80 | fileNo); // P1: Short EF identifier
+        apdu[3] = (byte) (offset & 0xFF); // P2: Offset (low byte)
+        apdu[4] = (byte) data.length;     // Lc
+
+        System.arraycopy(data, 0, apdu, 5, data.length);
+
+        return apdu;
     }
 
     /**
