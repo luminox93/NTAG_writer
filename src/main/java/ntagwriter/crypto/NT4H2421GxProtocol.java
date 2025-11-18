@@ -33,47 +33,6 @@ public class NT4H2421GxProtocol {
     // ===== 2단계: 핵심 암호화 보조 함수 =====
 
     /**
-     * 세션 벡터 SV 구성 (데이터시트 9.1.7)
-     *
-     * SV = prefix1 || prefix2 || 00 01 00 80 ||
-     *      RndA[15..14] || (RndA[13..8] XOR RndB[15..10]) ||
-     *      RndB[9..0] || RndA[7..0]
-     */
-    public static byte[] constructSV(byte prefix1, byte prefix2, byte[] rndA, byte[] rndB) {
-        byte[] sv = new byte[32];
-        int idx = 0;
-
-        // 헤더
-        sv[idx++] = prefix1;
-        sv[idx++] = prefix2;
-        sv[idx++] = 0x00;
-        sv[idx++] = 0x01;
-        sv[idx++] = 0x00;
-        sv[idx++] = (byte) 0x80;
-
-        // RndA[15..14]
-        sv[idx++] = rndA[15];
-        sv[idx++] = rndA[14];
-
-        // RndA[13..8] XOR RndB[15..10]
-        for (int i = 0; i < 6; i++) {
-            sv[idx++] = (byte)(rndA[13 - i] ^ rndB[15 - i]);
-        }
-
-        // RndB[9..0]
-        for (int i = 9; i >= 0; i--) {
-            sv[idx++] = rndB[i];
-        }
-
-        // RndA[7..0]
-        for (int i = 7; i >= 0; i--) {
-            sv[idx++] = rndA[i];
-        }
-
-        return sv;
-    }
-
-    /**
      * IV 구성 (보안 메시징용)
      * IV = E(KSesAuthENC, Label || TI || CmdCtr || ZeroPadding)
      */
@@ -170,12 +129,10 @@ public class NT4H2421GxProtocol {
         }
 
         private void generateSessionKeys() {
-            // SV1 → SesAuthENCKey
-            byte[] sv1 = constructSV((byte)0xA5, (byte)0x5A, rndA, rndB);
+            byte[] sv1 = SessionVectorBuilder.build((byte)0xA5, (byte)0x5A, rndA, rndB);
             this.sesAuthENCKey = PRF(authKey, sv1);
 
-            // SV2 → SesAuthMACKey
-            byte[] sv2 = constructSV((byte)0x5A, (byte)0xA5, rndA, rndB);
+            byte[] sv2 = SessionVectorBuilder.build((byte)0x5A, (byte)0xA5, rndA, rndB);
             this.sesAuthMACKey = PRF(authKey, sv2);
         }
 

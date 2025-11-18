@@ -2,6 +2,7 @@ package ntagwriter.service;
 
 import ntagwriter.crypto.ByteRotation;
 import ntagwriter.crypto.MacUtils;
+import ntagwriter.crypto.SessionVectorBuilder;
 import ntagwriter.domain.NtagDefaultConfig;
 import ntagwriter.domain.SdmConfig;
 import ntagwriter.reader.NfcReaderStrategy;
@@ -189,10 +190,10 @@ public class Ntag424AutoSetupService {
         }
 
         // 8. 세션 키 유도
-        byte[] sv1 = buildSessionVector((byte) 0xA5, (byte) 0x5A, rndA, rndB);
+        byte[] sv1 = SessionVectorBuilder.build((byte) 0xA5, (byte) 0x5A, rndA, rndB);
         kSesAuthENC = cryptoService.calculateCmac(DEFAULT_KEY, sv1);
 
-        byte[] sv2 = buildSessionVector((byte) 0x5A, (byte) 0xA5, rndA, rndB);
+        byte[] sv2 = SessionVectorBuilder.build((byte) 0x5A, (byte) 0xA5, rndA, rndB);
         kSesAuthMAC = cryptoService.calculateCmac(DEFAULT_KEY, sv2);
 
         // 9. 커맨드 카운터 초기화
@@ -202,45 +203,6 @@ public class Ntag424AutoSetupService {
 
         ConsoleHelper.printInfo("  TI: " + HexUtils.bytesToHex(transactionId));
         ConsoleHelper.printInfo("  Initial CmdCtr: " + HexUtils.bytesToHex(commandCounter));
-    }
-
-    /**
-     * 세션 벡터 생성
-     * SV = prefix1 prefix2 00 01 00 80 || RndA[15:14] || (RndA[13:8] XOR
-     * RndB[15:10]) || RndB[9:0] || RndA[7:0]
-     */
-    private byte[] buildSessionVector(byte prefix1, byte prefix2, byte[] rndA, byte[] rndB) {
-        byte[] sv = new byte[32];
-        int idx = 0;
-
-        // Prefix
-        sv[idx++] = prefix1;
-        sv[idx++] = prefix2;
-        sv[idx++] = 0x00;
-        sv[idx++] = 0x01;
-        sv[idx++] = 0x00;
-        sv[idx++] = (byte) 0x80;
-
-        // RndA[15:14]
-        sv[idx++] = rndA[15];
-        sv[idx++] = rndA[14];
-
-        // RndA[13:8] XOR RndB[15:10]
-        for (int i = 0; i < 6; i++) {
-            sv[idx++] = (byte) (rndA[13 - i] ^ rndB[15 - i]);
-        }
-
-        // RndB[9:0]
-        for (int i = 9; i >= 0; i--) {
-            sv[idx++] = rndB[i];
-        }
-
-        // RndA[7:0]
-        for (int i = 7; i >= 0; i--) {
-            sv[idx++] = rndA[i];
-        }
-
-        return sv;
     }
 
     /**

@@ -44,8 +44,8 @@ public class SessionKeyGenerator {
         }
 
         // SV1, SV2 생성
-        byte[] sv1 = generateSV1(rndA, rndB);
-        byte[] sv2 = generateSV2(rndA, rndB);
+        byte[] sv1 = SessionVectorBuilder.build((byte) 0xA5, (byte) 0x5A, rndA, rndB);
+        byte[] sv2 = SessionVectorBuilder.build((byte) 0x5A, (byte) 0xA5, rndA, rndB);
 
         // 세션 키 생성 (PRF = AES-CMAC)
         byte[] sesAuthENCKey = MacUtils.prfCmac(authKey, sv1);
@@ -55,98 +55,11 @@ public class SessionKeyGenerator {
     }
 
     /**
-     * SV1 생성 (암호화 키용)
-     *
-     * SV1 = A5h || 5Ah || 00h || 01h || 00h || 80h || RndA[15..14] ||
-     *       (RndA[13..8] XOR RndB[15..10]) || RndB[9..0] || RndA[7..0]
-     *
-     * @param rndA 리더 랜덤 값
-     * @param rndB 태그 랜덤 값
-     * @return 32바이트 SV1
-     */
-    private static byte[] generateSV1(byte[] rndA, byte[] rndB) {
-        byte[] sv1 = new byte[32];
-
-        // 헤더: A5h || 5Ah || 00h || 01h || 00h || 80h
-        sv1[0] = (byte) 0xA5;
-        sv1[1] = (byte) 0x5A;
-        sv1[2] = 0x00;
-        sv1[3] = 0x01;
-        sv1[4] = 0x00;
-        sv1[5] = (byte) 0x80;
-
-        // RndA[15..14] (2 bytes)
-        sv1[6] = rndA[15];
-        sv1[7] = rndA[14];
-
-        // RndA[13..8] XOR RndB[15..10] (6 bytes)
-        for (int i = 0; i < 6; i++) {
-            sv1[8 + i] = (byte) (rndA[13 - i] ^ rndB[15 - i]);
-        }
-
-        // RndB[9..0] (10 bytes)
-        for (int i = 0; i < 10; i++) {
-            sv1[14 + i] = rndB[9 - i];
-        }
-
-        // RndA[7..0] (8 bytes)
-        for (int i = 0; i < 8; i++) {
-            sv1[24 + i] = rndA[7 - i];
-        }
-
-        return sv1;
-    }
-
-    /**
-     * SV2 생성 (MAC 키용)
-     *
-     * SV2 = 5Ah || A5h || 00h || 01h || 00h || 80h || RndA[15..14] ||
-     *       (RndA[13..8] XOR RndB[15..10]) || RndB[9..0] || RndA[7..0]
-     *
-     * @param rndA 리더 랜덤 값
-     * @param rndB 태그 랜덤 값
-     * @return 32바이트 SV2
-     */
-    private static byte[] generateSV2(byte[] rndA, byte[] rndB) {
-        byte[] sv2 = new byte[32];
-
-        // 헤더: 5Ah || A5h || 00h || 01h || 00h || 80h (SV1과 처음 2바이트만 반대)
-        sv2[0] = (byte) 0x5A;
-        sv2[1] = (byte) 0xA5;
-        sv2[2] = 0x00;
-        sv2[3] = 0x01;
-        sv2[4] = 0x00;
-        sv2[5] = (byte) 0x80;
-
-        // 나머지는 SV1과 동일
-        // RndA[15..14] (2 bytes)
-        sv2[6] = rndA[15];
-        sv2[7] = rndA[14];
-
-        // RndA[13..8] XOR RndB[15..10] (6 bytes)
-        for (int i = 0; i < 6; i++) {
-            sv2[8 + i] = (byte) (rndA[13 - i] ^ rndB[15 - i]);
-        }
-
-        // RndB[9..0] (10 bytes)
-        for (int i = 0; i < 10; i++) {
-            sv2[14 + i] = rndB[9 - i];
-        }
-
-        // RndA[7..0] (8 bytes)
-        for (int i = 0; i < 8; i++) {
-            sv2[24 + i] = rndA[7 - i];
-        }
-
-        return sv2;
-    }
-
-    /**
      * 디버그용: SV 값을 출력
      */
     public static void printSessionVectors(byte[] rndA, byte[] rndB) {
-        byte[] sv1 = generateSV1(rndA, rndB);
-        byte[] sv2 = generateSV2(rndA, rndB);
+        byte[] sv1 = SessionVectorBuilder.build((byte) 0xA5, (byte) 0x5A, rndA, rndB);
+        byte[] sv2 = SessionVectorBuilder.build((byte) 0x5A, (byte) 0xA5, rndA, rndB);
 
         System.out.println("=== Session Vector Generation Debug ===");
         System.out.println("RndA: " + HexUtils.bytesToHex(rndA));
