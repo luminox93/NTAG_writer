@@ -1,6 +1,7 @@
 package ntagwriter.service;
 
 import ntagwriter.crypto.ByteRotation;
+import ntagwriter.crypto.MacUtils;
 import ntagwriter.domain.NtagDefaultConfig;
 import ntagwriter.domain.SdmConfig;
 import ntagwriter.reader.NfcReaderStrategy;
@@ -269,22 +270,6 @@ public class Ntag424AutoSetupService {
     }
 
     /**
-     * CMAC을 MACt로 변환
-     * NT4H2421Gx에서 MAC은 16바이트 CMAC 출력 중 8개의 짝수 번째 바이트만 사용
-     * (인덱스 1, 3, 5, 7, 9, 11, 13, 15)
-     */
-    private byte[] truncateMac(byte[] cmac) {
-        byte[] mact = new byte[8];
-        for (int i = 0; i < 8; i++) {
-            mact[i] = cmac[i * 2 + 1]; // 짝수 인덱스 (0-based이므로 1, 3, 5...)
-        }
-        ConsoleHelper.printInfo("  [DEBUG] CMAC bytes used for truncation: " +
-            String.format("[1]=%02X [3]=%02X [5]=%02X [7]=%02X [9]=%02X [11]=%02X [13]=%02X [15]=%02X",
-                cmac[1], cmac[3], cmac[5], cmac[7], cmac[9], cmac[11], cmac[13], cmac[15]));
-        return mact;
-    }
-
-    /**
      * IVc 입력 데이터 생성
      * AN12196 Figure 10: A55A || TI || CmdCtr || 8바이트 0
      */
@@ -359,7 +344,7 @@ public class Ntag424AutoSetupService {
             byte[] cmac = cryptoService.calculateCmac(kSesAuthMAC, cmacData);
             ConsoleHelper.printInfo("  [DEBUG] CMAC (full 16 bytes): " + HexUtils.bytesToHex(cmac));
 
-            byte[] mact = truncateMac(cmac);
+            byte[] mact = MacUtils.truncateMac(cmac);
             ConsoleHelper.printInfo("  [DEBUG] MACt (truncated 8 bytes): " + HexUtils.bytesToHex(mact));
 
             // APDU 구조: CLA INS P1 P2 Lc FileNo(평문) EncData MACt Le
@@ -536,7 +521,7 @@ public class Ntag424AutoSetupService {
         System.arraycopy(encryptedKeyData, 0, cmacData, idx, encryptedKeyData.length);
 
         byte[] cmac = cryptoService.calculateCmac(kSesAuthMAC, cmacData);
-        byte[] mact = truncateMac(cmac);
+        byte[] mact = MacUtils.truncateMac(cmac);
 
         // APDU 전송
         byte[] apdu = ApduCommand.changeKey(keyNo, encryptedKeyData, mact);

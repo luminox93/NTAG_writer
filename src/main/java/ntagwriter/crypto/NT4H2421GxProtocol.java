@@ -50,19 +50,6 @@ public class NT4H2421GxProtocol {
     // ===== 2단계: 핵심 암호화 보조 함수 =====
 
     /**
-     * MAC 트렁케이션 (NT4H2421Gx 전용)
-     * 16바이트 CMAC에서 짝수 번째 바이트 8개 추출
-     * 인덱스: 1, 3, 5, 7, 9, 11, 13, 15
-     */
-    public static byte[] truncateMAC(byte[] cmac) {
-        byte[] truncated = new byte[8];
-        for (int i = 0; i < 8; i++) {
-            truncated[i] = cmac[i * 2 + 1];
-        }
-        return truncated;
-    }
-
-    /**
      * 세션 벡터 SV 구성 (데이터시트 9.1.7)
      *
      * SV = prefix1 || prefix2 || 00 01 00 80 ||
@@ -263,7 +250,7 @@ public class NT4H2421GxProtocol {
             macInput.put(encryptedData);
 
             byte[] fullMAC = PRF(auth.getSesAuthMACKey(), macInput.array());
-            byte[] truncatedMAC = truncateMAC(fullMAC);
+            byte[] truncatedMAC = MacUtils.truncateMac(fullMAC);
 
             // APDU 구성
             ByteBuffer apdu = ByteBuffer.allocate(5 + 1 + encryptedData.length + 8 + 1);

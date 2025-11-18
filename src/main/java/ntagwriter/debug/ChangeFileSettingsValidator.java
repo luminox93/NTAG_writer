@@ -1,5 +1,6 @@
 package ntagwriter.debug;
 
+import ntagwriter.crypto.MacUtils;
 import ntagwriter.service.CryptoService;
 import ntagwriter.util.HexUtils;
 
@@ -21,7 +22,7 @@ public class ChangeFileSettingsValidator {
 
         byte[] cmacInput = buildCmacInput(example.getCmdCtr(), example.getTi(), example.getFileNumber(), encryptedSettings);
         byte[] cmac = cryptoService.calculateCmac(example.getKSesAuthMac(), cmacInput);
-        byte[] macT = truncateMac(cmac);
+        byte[] macT = MacUtils.truncateMac(cmac);
 
         System.out.println("--- ChangeFileSettings Doc Example Validation ---");
         System.out.println("Expected EncryptedSettings: " + HexUtils.bytesToHex(example.getExpectedEncryptedSettings()));
@@ -54,11 +55,4 @@ public class ChangeFileSettingsValidator {
         return cmacInput;
     }
 
-    private static byte[] truncateMac(byte[] cmac) {
-        byte[] macT = new byte[8];
-        for (int i = 0; i < 8; i++) {
-            macT[i] = cmac[i * 2 + 1];
-        }
-        return macT;
-    }
 }

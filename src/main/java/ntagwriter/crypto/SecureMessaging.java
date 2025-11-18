@@ -71,16 +71,9 @@ public class SecureMessaging {
      * @return 8바이트 트렁케이티드 MAC
      */
     public byte[] calculateMAC(byte[] data) {
-        // Full CMAC 계산 (16 bytes)
+        // Full CMAC 계산 후 짝수 인덱스 바이트만 추출
         byte[] fullMAC = calculateFullCMAC(sesAuthMACKey, data);
-
-        // 짝수 번째 바이트만 추출 (인덱스 1, 3, 5, 7, 9, 11, 13, 15)
-        byte[] truncatedMAC = new byte[8];
-        for (int i = 0; i < 8; i++) {
-            truncatedMAC[i] = fullMAC[i * 2 + 1]; // 짝수 인덱스 (0-based이므로 1, 3, 5...)
-        }
-
-        return truncatedMAC;
+        return MacUtils.truncateMac(fullMAC);
     }
 
     /**
