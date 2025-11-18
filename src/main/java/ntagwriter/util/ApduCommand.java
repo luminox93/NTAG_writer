@@ -89,21 +89,33 @@ public class ApduCommand {
 
     /**
      * NTAG424 AUTHENTICATE EV2 First 명령어 생성
+     * AN12196 Section 3.6
      *
      * @param keyNo 인증할 키 번호
-     * @param data  인증 데이터 (랜덤 챌린지)
+     * @param lenCap capability data 길이 (보통 0x00)
      * @return APDU 명령어 바이트 배열
      */
-    public static byte[] authenticateEV2First(byte keyNo, byte[] data) {
-        byte[] apdu = new byte[7 + data.length];
-        apdu[0] = CLA_PROPRIETARY;
-        apdu[1] = INS_AUTHENTICATE_EV2_FIRST;
+    public static byte[] authenticateEV2First(byte keyNo, byte lenCap) {
+        int capLen = Byte.toUnsignedInt(lenCap);
+        int dataLen = 2 + capLen;
+        byte[] apdu = new byte[5 + dataLen + 1];
+
+        apdu[0] = CLA_PROPRIETARY;        // 90
+        apdu[1] = INS_AUTHENTICATE_EV2_FIRST; // 71
         apdu[2] = 0x00;
         apdu[3] = 0x00;
-        apdu[4] = (byte) (2 + data.length); // Lc
-        apdu[5] = keyNo;
-        apdu[6] = (byte) data.length;
-        System.arraycopy(data, 0, apdu, 7, data.length);
+        apdu[4] = (byte) dataLen;         // Lc = 2 + LenCap
+
+        int idx = 5;
+        apdu[idx++] = keyNo;              // Key Number
+        apdu[idx++] = lenCap;             // LenCap
+
+        // Capability bytes (TagXplorer는 3바이트 0x000000 사용)
+        for (int i = 0; i < capLen; i++) {
+            apdu[idx++] = 0x00;
+        }
+
+        apdu[idx] = 0x00;                 // Le
         return apdu;
     }
 
@@ -239,27 +251,35 @@ public class ApduCommand {
     }
 
     /**
-     * NTAG424 WRITE DATA 명령어 생성 (CommMode.PLAIN)
-     * AN12196 Section 5.8.1, Table 16 참조 (ISOUpdateBinary 사용)
-     *
-     * @param fileNo       파일 번호
-     * @param offset       쓰기 시작 오프셋
-     * @param data         쓸 데이터 (평문)
-     * @return APDU 명령어 바이트 배열
+     * NTAG424 WRITE DATA 명령어 생성 (CommMode.Plain)
+     * 인증은 되어 있지만 데이터와 MAC 없이 Native WriteData를 사용할 때 사용
      */
-    public static byte[] writeDataPlain(byte fileNo, int offset, byte[] data) {
-        // CommMode.PLAIN에서는 ISOUpdateBinary 사용
-        // P1에 파일 번호를 OR
-        byte[] apdu = new byte[5 + data.length];
+    public static byte[] writeData(byte fileNo, int offset, byte[] data) {
+        int headerLen = 1 + 3 + 3; // FileNo + Offset + Length
+        int dataLen = headerLen + data.length;
+        byte[] apdu = new byte[5 + dataLen + 1];
 
-        apdu[0] = CLA_ISO;              // 00
-        apdu[1] = INS_UPDATE_BINARY;    // D6
-        apdu[2] = (byte) (0x80 | fileNo); // P1: Short EF identifier
-        apdu[3] = (byte) (offset & 0xFF); // P2: Offset (low byte)
-        apdu[4] = (byte) data.length;     // Lc
+        apdu[0] = CLA_PROPRIETARY;  // 90
+        apdu[1] = INS_WRITE_DATA;   // 8D
+        apdu[2] = 0x00;
+        apdu[3] = 0x00;
+        apdu[4] = (byte) dataLen;
 
-        System.arraycopy(data, 0, apdu, 5, data.length);
+        int idx = 5;
+        apdu[idx++] = fileNo;
+        apdu[idx++] = (byte) (offset & 0xFF);
+        apdu[idx++] = (byte) ((offset >> 8) & 0xFF);
+        apdu[idx++] = (byte) ((offset >> 16) & 0xFF);
 
+        int length = data.length;
+        apdu[idx++] = (byte) (length & 0xFF);
+        apdu[idx++] = (byte) ((length >> 8) & 0xFF);
+        apdu[idx++] = (byte) ((length >> 16) & 0xFF);
+
+        System.arraycopy(data, 0, apdu, idx, data.length);
+        idx += data.length;
+
+        apdu[idx] = 0x00; // Le
         return apdu;
     }
 
