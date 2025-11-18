@@ -1,5 +1,6 @@
 package ntagwriter.service;
 
+import ntagwriter.reader.ApduStatusWord;
 import ntagwriter.reader.NfcReaderStrategy;
 import ntagwriter.reader.ReaderException;
 import ntagwriter.util.ConsoleHelper;
@@ -73,28 +74,14 @@ public class NfcReaderService {
      * 응답 확인 (SW = 9000 또는 9100)
      */
     public boolean isSuccess(ResponseAPDU response) {
-        int sw = response.getSW();
-        return sw == 0x9000 || sw == 0x9100;
+        return ApduStatusWord.isSuccessSw(response.getSW());
     }
 
     /**
      * 에러 메시지 생성
      */
     public String getErrorMessage(ResponseAPDU response) {
-        int sw = response.getSW();
-        return switch (sw) {
-            case 0x9000, 0x9100 -> "성공";
-            case 0x6300 -> "검증 실패";
-            case 0x6700 -> "잘못된 길이";
-            case 0x6982 -> "보안 상태 불만족";
-            case 0x6985 -> "사용 조건 불만족";
-            case 0x6A80 -> "잘못된 데이터";
-            case 0x6A82 -> "파일을 찾을 수 없음";
-            case 0x6A86 -> "잘못된 P1/P2";
-            case 0x6D00 -> "명령어를 지원하지 않음";
-            case 0x6E00 -> "클래스를 지원하지 않음";
-            default -> String.format("알 수 없는 오류 (SW=%04X)", sw);
-        };
+        return ApduStatusWord.describe(response.getSW());
     }
 
     public boolean isConnected() {
