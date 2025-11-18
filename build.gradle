@@ -5,46 +5,47 @@ plugins {
 }
 
 version = '1.0.0'
-sourceCompatibility = '1.8'
-targetCompatibility = '1.8'
+sourceCompatibility = '21'
+targetCompatibility = '21'
 
 repositories {
     mavenCentral()
 }
 
 javafx {
-    version = "11.0.2"
+    version = "21.0.1"
     modules = ['javafx.controls', 'javafx.fxml']
 }
 
 dependencies {
-    // BouncyCastle for cryptography (AES-CMAC)
-    implementation 'org.bouncycastle:bcprov-jdk15on:1.70'
+    // BouncyCastle for cryptography (AES-CMAC) - Updated for Java 21
+    implementation 'org.bouncycastle:bcprov-jdk18on:1.78'
 
     // JSON processing
     implementation 'com.google.code.gson:gson:2.10.1'
 
-    // HTTP client (Java 8 compatible)
-    implementation 'org.apache.httpcomponents:httpclient:4.5.14'
+    // HTTP client - Using Java 11+ HttpClient (built-in)
+    // implementation 'org.apache.httpcomponents:httpclient:4.5.14' // Removed, using java.net.http
 
     // SQLite for local database
-    implementation 'org.xerial:sqlite-jdbc:3.42.0.0'
+    implementation 'org.xerial:sqlite-jdbc:3.45.0.0'
 
     // Logging
-    implementation 'org.slf4j:slf4j-api:1.7.36'
-    implementation 'ch.qos.logback:logback-classic:1.2.12'
+    implementation 'org.slf4j:slf4j-api:2.0.9'
+    implementation 'ch.qos.logback:logback-classic:1.4.14'
 
     // Lombok (optional, for reducing boilerplate)
     compileOnly 'org.projectlombok:lombok:1.18.30'
     annotationProcessor 'org.projectlombok:lombok:1.18.30'
 
     // Testing
-    testImplementation 'junit:junit:4.13.2'
-    testImplementation 'org.mockito:mockito-core:3.12.4'
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.1'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    testImplementation 'org.mockito:mockito-core:5.8.0'
 }
 
 application {
-    mainClassName = 'ntagwriter.NtagWriterApplication'
+    mainClass = 'ntagwriter.NtagWriterApplication'
 }
 
 // Create fat JAR with all dependencies
@@ -68,6 +69,7 @@ task checkJavaVersion {
 }
 
 test {
+    useJUnitPlatform() // Enable JUnit 5
     testLogging {
         events "passed", "skipped", "failed"
         exceptionFormat "full"
