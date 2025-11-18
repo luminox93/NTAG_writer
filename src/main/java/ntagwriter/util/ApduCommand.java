@@ -99,11 +99,27 @@ public class ApduCommand {
      */
     public static byte[] authenticateEV2First(byte keyNo, byte lenCap) {
         int capLen = Byte.toUnsignedInt(lenCap);
+        if (capLen == 0) {
+            return authenticateEV2First(keyNo, (byte[]) null);
+        }
+        byte[] capabilities = new byte[capLen];
+        return authenticateEV2First(keyNo, capabilities);
+    }
+
+    /**
+     * NTAG424 AUTHENTICATE EV2 First 명령어 생성 (PCDcap2 포함)
+     *
+     * @param keyNo         인증할 키 번호
+     * @param pcdCapabilities PCDcap2 데이터 (LenCap = length)
+     * @return APDU 명령어 바이트 배열
+     */
+    public static byte[] authenticateEV2First(byte keyNo, byte[] pcdCapabilities) {
+        int capLen = pcdCapabilities == null ? 0 : pcdCapabilities.length;
         byte[] payload = new byte[2 + capLen];
         payload[0] = keyNo;
-        payload[1] = lenCap;
-        for (int i = 0; i < capLen; i++) {
-            payload[2 + i] = 0x00;
+        payload[1] = (byte) capLen;
+        if (capLen > 0) {
+            System.arraycopy(pcdCapabilities, 0, payload, 2, capLen);
         }
 
         return CommandApdu.builder(CLA_PROPRIETARY, INS_AUTHENTICATE_EV2_FIRST)

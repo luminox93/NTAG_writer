@@ -1,15 +1,12 @@
 package ntagwriter.service;
 
-import ntagwriter.crypto.ByteRotation;
 import ntagwriter.domain.SetupStep;
 import ntagwriter.domain.SdmConfig;
 import ntagwriter.reader.NfcReaderStrategy;
 import ntagwriter.reader.ReaderException;
-import ntagwriter.util.ApduCommand;
 import ntagwriter.util.ConsoleHelper;
 import ntagwriter.util.HexUtils;
 
-import javax.smartcardio.ResponseAPDU;
 import java.security.GeneralSecurityException;
 
 /**
@@ -26,6 +23,7 @@ public class Ntag424SetupService {
 
     private final NfcReaderService readerService;
     private final CryptoService cryptoService;
+    private final Ev2AuthenticationService ev2AuthService;
 
     // 설정 상태
     private String tagUid;
@@ -33,10 +31,15 @@ public class Ntag424SetupService {
     private String baseUrl;
     private SdmConfig sdmConfig;
     private SetupStep currentStep;
+    private byte[] transactionId;
+    private byte[] commandCounter;
+    private byte[] kSesAuthENC;
+    private byte[] kSesAuthMAC;
 
     public Ntag424SetupService(NfcReaderStrategy reader) {
         this.readerService = new NfcReaderService(reader);
         this.cryptoService = new CryptoService();
+        this.ev2AuthService = new Ev2AuthenticationService(readerService, cryptoService);
         this.currentStep = SetupStep.CONNECT_READER;
     }
 
@@ -142,8 +145,8 @@ public class Ntag424SetupService {
     private void selectApplication() throws ReaderException {
         ConsoleHelper.printProgress("NTAG424 DNA 애플리케이션 선택 중...");
 
-        byte[] selectApdu = ApduCommand.selectApplication(NTAG424_AID);
-        ResponseAPDU response = readerService.sendCommand(selectApdu);
+        byte[] selectApdu = ntagwriter.util.ApduCommand.selectApplication(NTAG424_AID);
+        javax.smartcardio.ResponseAPDU response = readerService.sendCommand(selectApdu);
 
         if (!readerService.isSuccess(response)) {
             throw new ReaderException("애플리케이션 선택 실패: " +
@@ -161,52 +164,17 @@ public class Ntag424SetupService {
         ConsoleHelper.printProgress("기본 키로 인증 중...");
         ConsoleHelper.printInfo("공장 초기화 상태의 태그는 기본 키(00...00)를 사용합니다.");
 
-        ConsoleHelper.printWarning("⚠ 완전한 EV2 인증 구현이 아직 완료되지 않았습니다.");
-        ConsoleHelper.printInfo("시뮬레이션 모드로 진행합니다.");
+        Ev2AuthenticationService.Ev2Session session =
+            ev2AuthService.authenticate(KEY_NUMBER, DEFAULT_KEY);
 
-        // TODO: 완전한 EV2 인증 구현
-        // EV2 인증은 다음 단계로 이루어집니다:
-        // 1. AuthenticateEV2First 명령 전송
-        // 2. 태그로부터 암호화된 RndB 수신 (SW=91AF)
-        // 3. RndB 복호화 (AES-128)
-        // 4. RndA 생성 (16바이트 랜덤)
-        // 5. RndB를 1바이트 왼쪽 회전 (RndB')
-        // 6. RndA || RndB' 암호화
-        // 7. AuthenticateEV2NonFirst로 암호화된 데이터 전송
-        // 8. 태그 응답 검증 (RndA' = RndA rotated)
-        // 9. 세션 키 생성 (ENC, MAC)
+        this.transactionId = session.transactionId();
+        this.commandCounter = session.commandCounter();
+        this.kSesAuthENC = session.kSesAuthEnc();
+        this.kSesAuthMAC = session.kSesAuthMac();
 
-        /*
-        // 실제 구현 예시 (현재는 주석 처리)
-        byte[] rndA = cryptoService.generateRandomBytes(16);
-
-        // Step 1: Send AuthenticateEV2First
-        byte[] authFirstCmd = ApduCommand.authenticateEV2First(KEY_NUMBER, (byte) 0x03);
-        ResponseAPDU response1 = readerService.sendCommand(authFirstCmd);
-
-        if (response1.getSW() != 0x91AF) {
-            throw new ReaderException("인증 1단계 실패: " +
-                readerService.getErrorMessage(response1));
-        }
-
-        // Step 2: Decrypt RndB
-        byte[] encRndB = response1.getData();
-        byte[] rndB = cryptoService.decryptECB(DEFAULT_KEY, encRndB);
-
-        // Step 3: Rotate RndB
-        byte[] rndBRotated = ByteRotation.rotateLeft(rndB);
-
-        // Step 4: Encrypt RndA || RndB'
-        byte[] combined = new byte[32];
-        System.arraycopy(rndA, 0, combined, 0, 16);
-        System.arraycopy(rndBRotated, 0, combined, 16, 16);
-        byte[] encData = cryptoService.encryptECB(DEFAULT_KEY, combined);
-
-        // Step 5: Send AuthenticateEV2NonFirst
-        // ... (계속)
-        */
-
-        ConsoleHelper.printSuccess("인증 성공 (시뮬레이션)");
+        ConsoleHelper.printInfo("세션 키 생성 완료 (Fig.6, SV+PRF 기반)");
+        ConsoleHelper.printInfo("  TI: " + HexUtils.bytesToHex(transactionId));
+        ConsoleHelper.printInfo("  CmdCtr: " + HexUtils.bytesToHex(commandCounter));
     }
 
     /**

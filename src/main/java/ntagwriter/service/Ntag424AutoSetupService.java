@@ -1,8 +1,6 @@
 package ntagwriter.service;
 
-import ntagwriter.crypto.ByteRotation;
 import ntagwriter.crypto.MacUtils;
-import ntagwriter.crypto.SessionVectorBuilder;
 import ntagwriter.domain.NtagDefaultConfig;
 import ntagwriter.domain.SdmConfig;
 import ntagwriter.reader.NfcReaderStrategy;
@@ -28,6 +26,7 @@ public class Ntag424AutoSetupService {
 
     private final NfcReaderService readerService;
     private final CryptoService cryptoService;
+    private final Ev2AuthenticationService ev2AuthService;
     private final NtagDefaultConfig config;
 
     // 설정 상태
@@ -48,6 +47,7 @@ public class Ntag424AutoSetupService {
     public Ntag424AutoSetupService(NfcReaderStrategy reader, NtagDefaultConfig config) {
         this.readerService = new NfcReaderService(reader);
         this.cryptoService = new CryptoService();
+        this.ev2AuthService = new Ev2AuthenticationService(readerService, cryptoService);
         this.config = config;
     }
 
@@ -128,78 +128,13 @@ public class Ntag424AutoSetupService {
      * AN12196 Section 3.6 참조
      */
     private void authenticate() throws ReaderException, GeneralSecurityException {
-        // 1. AuthenticateEV2First 명령 전송 (RndB 요청)
-        byte[] cmd1 = ApduCommand.authenticateEV2First(KEY_NUMBER, (byte) 0x03);
-        ResponseAPDU response1 = readerService.sendCommand(cmd1);
+        Ev2AuthenticationService.Ev2Session session =
+                ev2AuthService.authenticate(KEY_NUMBER, DEFAULT_KEY);
 
-        if (response1.getSW() != 0x91AF) {
-            throw new ReaderException("EV2 인증 시작 실패: " +
-                    readerService.getErrorMessage(response1));
-        }
-
-        // 2. 암호화된 RndB 수신 및 복호화
-        byte[] encRndB = response1.getData();
-        byte[] rndB = cryptoService.decryptCBC(DEFAULT_KEY, new byte[16], encRndB);
-
-        // 3. RndA 생성
-        byte[] rndA = cryptoService.generateRandomBytes(16);
-
-        // 4. RndB를 왼쪽으로 1바이트 rotate
-        byte[] rndBRotated = ByteRotation.rotateLeft(rndB);
-
-        // 5. RndA || RndB' 연결 및 암호화
-        byte[] combined = new byte[32];
-        System.arraycopy(rndA, 0, combined, 0, 16);
-        System.arraycopy(rndBRotated, 0, combined, 16, 16);
-
-        byte[] encCombined = cryptoService.encryptCBC(DEFAULT_KEY, new byte[16], combined);
-
-        // 6. AF 명령으로 암호화된 데이터 전송
-        byte[] cmd2 = new byte[5 + encCombined.length + 1];
-        cmd2[0] = (byte) 0x90;
-        cmd2[1] = (byte) 0xAF;
-        cmd2[2] = 0x00;
-        cmd2[3] = 0x00;
-        cmd2[4] = (byte) encCombined.length;
-        System.arraycopy(encCombined, 0, cmd2, 5, encCombined.length);
-        cmd2[cmd2.length - 1] = 0x00;
-
-        ResponseAPDU response2 = readerService.sendCommand(cmd2);
-
-        if (response2.getSW() != 0x9100 && response2.getSW() != 0x9000) {
-            throw new ReaderException("EV2 인증 실패: " +
-                    readerService.getErrorMessage(response2));
-        }
-
-        // 7. 응답 복호화 및 검증
-        byte[] encResponse = response2.getData();
-        byte[] decResponse = cryptoService.decryptCBC(DEFAULT_KEY, new byte[16], encResponse);
-
-        // TI 추출 (첫 4 바이트)
-        transactionId = new byte[4];
-        System.arraycopy(decResponse, 0, transactionId, 0, 4);
-
-        // RndA' 추출 (4~19 바이트)
-        byte[] rndARotated = new byte[16];
-        System.arraycopy(decResponse, 4, rndARotated, 0, 16);
-
-        // RndA' 검증
-        byte[] rndAVerify = ByteRotation.rotateRight(rndARotated);
-        if (!java.util.Arrays.equals(rndA, rndAVerify)) {
-            throw new ReaderException("EV2 인증 검증 실패: RndA 불일치");
-        }
-
-        // 8. 세션 키 유도
-        byte[] sv1 = SessionVectorBuilder.build((byte) 0xA5, (byte) 0x5A, rndA, rndB);
-        kSesAuthENC = cryptoService.calculateCmac(DEFAULT_KEY, sv1);
-
-        byte[] sv2 = SessionVectorBuilder.build((byte) 0x5A, (byte) 0xA5, rndA, rndB);
-        kSesAuthMAC = cryptoService.calculateCmac(DEFAULT_KEY, sv2);
-
-        // 9. 커맨드 카운터 초기화
-        // AuthenticateEV2First 성공 후 CmdCtr은 0000h로 초기화되지만,
-        // 인증 응답 처리 후 증가시켜야 함 (다음 명령은 0001h)
-        commandCounter = new byte[] { 0x01, 0x00 }; // Little-endian: 0x0001
+        this.transactionId = session.transactionId();
+        this.kSesAuthENC = session.kSesAuthEnc();
+        this.kSesAuthMAC = session.kSesAuthMac();
+        this.commandCounter = session.commandCounter();
 
         ConsoleHelper.printInfo("  TI: " + HexUtils.bytesToHex(transactionId));
         ConsoleHelper.printInfo("  Initial CmdCtr: " + HexUtils.bytesToHex(commandCounter));
