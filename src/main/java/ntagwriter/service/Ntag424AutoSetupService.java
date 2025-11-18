@@ -81,33 +81,21 @@ public class Ntag424AutoSetupService {
             authenticate();
             ConsoleHelper.printSuccess("인증 완료");
 
-            // 6. AES 키 생성
-            ConsoleHelper.printProgress("AES 키 생성 중...");
-            aesKey = cryptoService.generateRandomBytes(16);
-            ConsoleHelper.printSuccess("AES 키 생성됨: " + HexUtils.bytesToHex(aesKey));
-
-            // 7. SDM 설정
+            // 6. SDM 설정
             ConsoleHelper.printProgress("SDM 설정 적용 중...");
             configureSdm();
             ConsoleHelper.printSuccess("SDM 설정 완료");
 
-            // 8. NDEF 메시지 작성
+            // 7. NDEF 메시지 작성
             ConsoleHelper.printProgress("NDEF URL 작성 중...");
             writeNdefMessage();
             ConsoleHelper.printSuccess("NDEF 메시지 작성 완료");
-
-            // 9. 키 변경
-            ConsoleHelper.printProgress("보안 키 변경 중...");
-            changeKeys();
-            ConsoleHelper.printSuccess("키 변경 완료");
 
             ConsoleHelper.println();
             ConsoleHelper.printSection("설정 완료!");
             ConsoleHelper.printSuccess("태그가 성공적으로 설정되었습니다.");
             ConsoleHelper.println();
-            ConsoleHelper.printWarning("중요 정보 - 안전하게 보관하세요:");
-            ConsoleHelper.printInfo("  태그 UID: " + tagUid);
-            ConsoleHelper.printInfo("  AES 키: " + HexUtils.bytesToHex(aesKey));
+            ConsoleHelper.printInfo("태그 UID: " + tagUid);
 
             return true;
 
@@ -206,7 +194,7 @@ public class Ntag424AutoSetupService {
     private void configureSdm() throws ReaderException {
         try {
             // Enum에서 정의된 설정값 사용
-            sdmConfig = new SdmConfig(config.getBaseUrl(), aesKey);
+            sdmConfig = new SdmConfig(config.getBaseUrl(), DEFAULT_KEY);
             sdmConfig.setPicOffset(config.getPiccDataOffset());
             sdmConfig.setSdmMacOffset(config.getSdmMacOffset());
             sdmConfig.setSdmMacInputOffset(config.getSdmMacInputOffset());
