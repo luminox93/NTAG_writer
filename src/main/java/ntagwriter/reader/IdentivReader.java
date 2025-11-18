@@ -1,5 +1,6 @@
 package ntagwriter.reader;
 
+import ntagwriter.util.ConsoleHelper;
 import ntagwriter.util.HexUtils;
 
 import javax.smartcardio.*;
@@ -41,20 +42,18 @@ public class IdentivReader implements NfcReaderStrategy {
             // identiv를 못 찾으면 첫 번째 리더기 사용
             if (terminal == null) {
                 terminal = terminals.get(0);
-                System.out.println("경고: identiv uTrust 3700 F를 찾을 수 없어 '" + terminal.getName() + "' 리더기를 사용합니다.");
+                ConsoleHelper.printWarning("identiv uTrust 3700 F를 찾을 수 없어 '" + terminal.getName() + "' 리더기를 사용합니다.");
             }
 
             // 태그가 올라올 때까지 대기
             if (!terminal.isCardPresent()) {
-                System.out.println("태그를 리더기에 올려주세요...");
+                ConsoleHelper.printInfo("태그를 리더기에 올려주세요...");
                 terminal.waitForCardPresent(0); // 무한 대기
             }
 
             // 카드 연결
             card = terminal.connect("*");
             channel = card.getBasicChannel();
-
-            System.out.println("리더기 연결 성공: " + terminal.getName());
 
         } catch (CardException e) {
             throw new ReaderException("리더기 연결 실패: " + e.getMessage(), e);
@@ -72,9 +71,7 @@ public class IdentivReader implements NfcReaderStrategy {
                 throw new ReaderException("UID 읽기 실패: " + String.format("%04X", response.getSW()));
             }
 
-            byte[] uid = response.getData();
-            System.out.println("태그 UID: " + HexUtils.bytesToHex(uid));
-            return uid;
+            return response.getData();
 
         } catch (CardException e) {
             throw new ReaderException("UID 읽기 중 오류 발생: " + e.getMessage(), e);
@@ -111,7 +108,6 @@ public class IdentivReader implements NfcReaderStrategy {
             }
             channel = null;
             terminal = null;
-            System.out.println("리더기 연결 해제됨");
         } catch (CardException e) {
             System.err.println("리더기 연결 해제 중 오류: " + e.getMessage());
         }

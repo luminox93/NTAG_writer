@@ -1,3 +1,6 @@
+# Environment variables
+.env
+
 # Gradle
 .gradle/
 build/
@@ -26,6 +29,7 @@ resources/
 
 # Docs (internal specs)
 docs/ntag_todo.md
+docs/ntag424.md
 
 # OS
 .DS_Store

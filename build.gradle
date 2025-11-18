@@ -68,6 +68,13 @@ task checkJavaVersion {
     }
 }
 
+task runChangeFileSettingsExample(type: JavaExec) {
+    group = 'verification'
+    description = 'Runs AN12196 ChangeFileSettings example validation.'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'ntagwriter.debug.ChangeFileSettingsValidator'
+}
+
 test {
     useJUnitPlatform() // Enable JUnit 5
     testLogging {

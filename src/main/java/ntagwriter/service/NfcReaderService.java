@@ -2,6 +2,7 @@ package ntagwriter.service;
 
 import ntagwriter.reader.NfcReaderStrategy;
 import ntagwriter.reader.ReaderException;
+import ntagwriter.util.ConsoleHelper;
 import ntagwriter.util.HexUtils;
 
 import javax.smartcardio.ResponseAPDU;
@@ -25,13 +26,12 @@ public class NfcReaderService {
      */
     public void connect() throws ReaderException {
         if (connected) {
-            System.out.println("이미 리더기가 연결되어 있습니다.");
+            ConsoleHelper.printWarning("이미 리더기가 연결되어 있습니다.");
             return;
         }
 
         reader.connect();
         connected = true;
-        System.out.println("리더기 연결됨: " + reader.getReaderName());
     }
 
     /**
@@ -44,7 +44,6 @@ public class NfcReaderService {
 
         reader.disconnect();
         connected = false;
-        System.out.println("리더기 연결 해제됨");
     }
 
     /**
@@ -71,10 +70,11 @@ public class NfcReaderService {
     }
 
     /**
-     * 응답 확인 (SW = 9000)
+     * 응답 확인 (SW = 9000 또는 9100)
      */
     public boolean isSuccess(ResponseAPDU response) {
-        return response.getSW() == 0x9000;
+        int sw = response.getSW();
+        return sw == 0x9000 || sw == 0x9100;
     }
 
     /**
@@ -83,7 +83,7 @@ public class NfcReaderService {
     public String getErrorMessage(ResponseAPDU response) {
         int sw = response.getSW();
         return switch (sw) {
-            case 0x9000 -> "성공";
+            case 0x9000, 0x9100 -> "성공";
             case 0x6300 -> "검증 실패";
             case 0x6700 -> "잘못된 길이";
             case 0x6982 -> "보안 상태 불만족";

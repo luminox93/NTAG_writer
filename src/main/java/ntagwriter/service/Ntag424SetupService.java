@@ -124,7 +124,6 @@ public class Ntag424SetupService {
         ConsoleHelper.printProgress("리더기를 검색하고 연결 중...");
         readerService.connect();
         ConsoleHelper.printSuccess("리더기 연결됨: " + readerService.getReader().getReaderName());
-        ConsoleHelper.printInfo("태그를 리더기에 올려주세요.");
     }
 
     /**
@@ -181,7 +180,7 @@ public class Ntag424SetupService {
         byte[] rndA = cryptoService.generateRandomBytes(16);
 
         // Step 1: Send AuthenticateEV2First
-        byte[] authFirstCmd = ApduCommand.authenticateEV2First(KEY_NUMBER, new byte[2]);
+        byte[] authFirstCmd = ApduCommand.authenticateEV2First(KEY_NUMBER, (byte) 0x03);
         ResponseAPDU response1 = readerService.sendCommand(authFirstCmd);
 
         if (response1.getSW() != 0x91AF) {

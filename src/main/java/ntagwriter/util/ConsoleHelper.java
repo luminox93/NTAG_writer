@@ -10,6 +10,12 @@ public class ConsoleHelper {
 
     private static final Scanner scanner = new Scanner(System.in);
 
+    private static final String INFO_PREFIX = "[INFO] ";
+    private static final String SUCCESS_PREFIX = "[OK] ";
+    private static final String WARNING_PREFIX = "[WARN] ";
+    private static final String ERROR_PREFIX = "[ERROR] ";
+    private static final String PROGRESS_PREFIX = "-> ";
+
     /**
      * 사용자에게 예/아니오 질문
      * @param message 질문 메시지
@@ -71,7 +77,7 @@ public class ConsoleHelper {
      * @param message 메시지
      */
     public static void printInfo(String message) {
-        System.out.println("ℹ " + message);
+        System.out.println(INFO_PREFIX + message);
     }
 
     /**
@@ -79,7 +85,7 @@ public class ConsoleHelper {
      * @param message 메시지
      */
     public static void printSuccess(String message) {
-        System.out.println("✓ " + message);
+        System.out.println(SUCCESS_PREFIX + message);
     }
 
     /**
@@ -87,7 +93,7 @@ public class ConsoleHelper {
      * @param message 메시지
      */
     public static void printWarning(String message) {
-        System.out.println("⚠ " + message);
+        System.out.println(WARNING_PREFIX + message);
     }
 
     /**
@@ -95,7 +101,7 @@ public class ConsoleHelper {
      * @param message 메시지
      */
     public static void printError(String message) {
-        System.err.println("✗ " + message);
+        System.err.println(ERROR_PREFIX + message);
     }
 
     /**
@@ -103,7 +109,7 @@ public class ConsoleHelper {
      * @param message 메시지
      */
     public static void printProgress(String message) {
-        System.out.println("→ " + message);
+        System.out.println(PROGRESS_PREFIX + message);
     }
 
     /**
