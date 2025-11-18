@@ -1,5 +1,6 @@
 package ntagwriter.service;
 
+import ntagwriter.crypto.ByteRotation;
 import ntagwriter.domain.SetupStep;
 import ntagwriter.domain.SdmConfig;
 import ntagwriter.reader.NfcReaderStrategy;
@@ -193,7 +194,7 @@ public class Ntag424SetupService {
         byte[] rndB = cryptoService.decryptECB(DEFAULT_KEY, encRndB);
 
         // Step 3: Rotate RndB
-        byte[] rndBRotated = rotateLeft(rndB, 1);
+        byte[] rndBRotated = ByteRotation.rotateLeft(rndB);
 
         // Step 4: Encrypt RndA || RndB'
         byte[] combined = new byte[32];
@@ -206,17 +207,6 @@ public class Ntag424SetupService {
         */
 
         ConsoleHelper.printSuccess("인증 성공 (시뮬레이션)");
-    }
-
-    /**
-     * 바이트 배열을 왼쪽으로 회전
-     */
-    private byte[] rotateLeft(byte[] data, int count) {
-        byte[] result = new byte[data.length];
-        int offset = count % data.length;
-        System.arraycopy(data, offset, result, 0, data.length - offset);
-        System.arraycopy(data, 0, result, data.length - offset, offset);
-        return result;
     }
 
     /**

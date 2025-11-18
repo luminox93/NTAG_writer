@@ -50,17 +50,6 @@ public class NT4H2421GxProtocol {
     // ===== 2단계: 핵심 암호화 보조 함수 =====
 
     /**
-     * 1바이트 좌측 회전
-     * RndB → RndB', RndA → RndA'
-     */
-    public static byte[] rotateLeft(byte[] data) {
-        byte[] rotated = new byte[data.length];
-        System.arraycopy(data, 1, rotated, 0, data.length - 1);
-        rotated[data.length - 1] = data[0];
-        return rotated;
-    }
-
-    /**
      * MAC 트렁케이션 (NT4H2421Gx 전용)
      * 16바이트 CMAC에서 짝수 번째 바이트 8개 추출
      * 인덱스: 1, 3, 5, 7, 9, 11, 13, 15
@@ -169,7 +158,7 @@ public class NT4H2421GxProtocol {
             random.nextBytes(rndA);
 
             // RndB' 생성
-            byte[] rndBRotated = rotateLeft(rndB);
+            byte[] rndBRotated = ByteRotation.rotateLeft(rndB);
 
             // 연결
             byte[] combined = new byte[32];
@@ -201,7 +190,7 @@ public class NT4H2421GxProtocol {
 
             // RndA' 검증
             byte[] rndAPrime = Arrays.copyOfRange(decrypted, 4, 20);
-            byte[] expectedRndAPrime = rotateLeft(rndA);
+            byte[] expectedRndAPrime = ByteRotation.rotateLeft(rndA);
             if (!Arrays.equals(rndAPrime, expectedRndAPrime)) {
                 throw new SecurityException("RndA' 검증 실패");
             }
@@ -344,7 +333,7 @@ public class NT4H2421GxProtocol {
             byte[] ti = HexUtils.hexToBytes("AABBCCDD");
             byte[] finalResponse = new byte[32];
             System.arraycopy(ti, 0, finalResponse, 0, 4);
-            System.arraycopy(rotateLeft(auth.rndA), 0, finalResponse, 4, 16);
+            System.arraycopy(ByteRotation.rotateLeft(auth.rndA), 0, finalResponse, 4, 16);
 
             cipher.init(Cipher.ENCRYPT_MODE,
                        new SecretKeySpec(authKey, "AES"),

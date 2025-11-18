@@ -1,6 +1,7 @@
 package ntagwriter.test;
 
 import ntagwriter.crypto.AuthenticateEV2;
+import ntagwriter.crypto.ByteRotation;
 import ntagwriter.crypto.SecureMessaging;
 import ntagwriter.crypto.SessionKeyGenerator;
 import ntagwriter.util.HexUtils;
@@ -73,7 +74,7 @@ public class AuthenticationTest {
 
             // 태그 응답 시뮬레이션
             byte[] ti = HexUtils.hexToBytes("12345678"); // 예제 TI
-            byte[] rndAPrime = SecureMessaging.rotateLeft(result.rndA);
+            byte[] rndAPrime = ByteRotation.rotateLeft(result.rndA);
             byte[] pdCap2 = new byte[6];
             byte[] pcdCap2 = new byte[6];
 

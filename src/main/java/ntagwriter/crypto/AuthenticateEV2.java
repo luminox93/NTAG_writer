@@ -62,7 +62,7 @@ public class AuthenticateEV2 {
 
         // Step 2: RndA 생성 및 RndB' 계산
         byte[] rndA = generateRandom(16);
-        byte[] rndBRotated = SecureMessaging.rotateLeft(rndB); // RndB'
+        byte[] rndBRotated = ByteRotation.rotateLeft(rndB); // RndB'
 
         System.out.println("\n=== Authentication Step 2 ===");
         System.out.println("Generated RndA: " + HexUtils.bytesToHex(rndA));
@@ -140,7 +140,7 @@ public class AuthenticateEV2 {
         offset += 16;
 
         // RndA'가 RndA를 1바이트 왼쪽 회전한 것인지 검증
-        byte[] expectedRndAPrime = SecureMessaging.rotateLeft(rndA);
+        byte[] expectedRndAPrime = ByteRotation.rotateLeft(rndA);
         if (!Arrays.equals(rndAPrime, expectedRndAPrime)) {
             throw new SecurityException("RndA' 검증 실패 - 인증 실패");
         }

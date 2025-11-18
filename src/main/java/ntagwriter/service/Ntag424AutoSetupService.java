@@ -1,5 +1,6 @@
 package ntagwriter.service;
 
+import ntagwriter.crypto.ByteRotation;
 import ntagwriter.domain.NtagDefaultConfig;
 import ntagwriter.domain.SdmConfig;
 import ntagwriter.reader.NfcReaderStrategy;
@@ -142,7 +143,7 @@ public class Ntag424AutoSetupService {
         byte[] rndA = cryptoService.generateRandomBytes(16);
 
         // 4. RndB를 왼쪽으로 1바이트 rotate
-        byte[] rndBRotated = rotateLeft(rndB);
+        byte[] rndBRotated = ByteRotation.rotateLeft(rndB);
 
         // 5. RndA || RndB' 연결 및 암호화
         byte[] combined = new byte[32];
@@ -181,7 +182,7 @@ public class Ntag424AutoSetupService {
         System.arraycopy(decResponse, 4, rndARotated, 0, 16);
 
         // RndA' 검증
-        byte[] rndAVerify = rotateRight(rndARotated);
+        byte[] rndAVerify = ByteRotation.rotateRight(rndARotated);
         if (!java.util.Arrays.equals(rndA, rndAVerify)) {
             throw new ReaderException("EV2 인증 검증 실패: RndA 불일치");
         }
@@ -239,26 +240,6 @@ public class Ntag424AutoSetupService {
         }
 
         return sv;
-    }
-
-    /**
-     * 바이트 배열을 왼쪽으로 1바이트 rotate
-     */
-    private byte[] rotateLeft(byte[] data) {
-        byte[] rotated = new byte[data.length];
-        System.arraycopy(data, 1, rotated, 0, data.length - 1);
-        rotated[data.length - 1] = data[0];
-        return rotated;
-    }
-
-    /**
-     * 바이트 배열을 오른쪽으로 1바이트 rotate
-     */
-    private byte[] rotateRight(byte[] data) {
-        byte[] rotated = new byte[data.length];
-        rotated[0] = data[data.length - 1];
-        System.arraycopy(data, 0, rotated, 1, data.length - 1);
-        return rotated;
     }
 
     /**

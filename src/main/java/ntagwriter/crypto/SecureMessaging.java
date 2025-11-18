@@ -275,20 +275,6 @@ public class SecureMessaging {
     }
 
     /**
-     * 1바이트 좌측 회전 (인증 프로토콜용)
-     */
-    public static byte[] rotateLeft(byte[] data) {
-        if (data == null || data.length == 0) {
-            return data;
-        }
-
-        byte[] rotated = new byte[data.length];
-        System.arraycopy(data, 1, rotated, 0, data.length - 1);
-        rotated[data.length - 1] = data[0];
-        return rotated;
-    }
-
-    /**
      * 디버그: 보안 메시징 상태 출력
      */
     public void printDebugInfo() {
