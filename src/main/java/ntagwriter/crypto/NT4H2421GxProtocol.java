@@ -1,9 +1,5 @@
 package ntagwriter.crypto;
 
-import org.bouncycastle.crypto.BlockCipher;
-import org.bouncycastle.crypto.engines.AESEngine;
-import org.bouncycastle.crypto.macs.CMac;
-import org.bouncycastle.crypto.params.KeyParameter;
 import ntagwriter.util.HexUtils;
 
 import javax.crypto.Cipher;
@@ -31,20 +27,7 @@ public class NT4H2421GxProtocol {
      * NIST SP 800-38B
      */
     public static byte[] PRF(byte[] key, byte[] data) {
-        try {
-            BlockCipher cipher = new AESEngine();
-            CMac cmac = new CMac(cipher);
-            KeyParameter keyParam = new KeyParameter(key);
-
-            cmac.init(keyParam);
-            cmac.update(data, 0, data.length);
-
-            byte[] output = new byte[16];
-            cmac.doFinal(output, 0);
-            return output;
-        } catch (Exception e) {
-            throw new RuntimeException("PRF 계산 실패: " + e.getMessage(), e);
-        }
+        return MacUtils.prfCmac(key, data);
     }
 
     // ===== 2단계: 핵심 암호화 보조 함수 =====

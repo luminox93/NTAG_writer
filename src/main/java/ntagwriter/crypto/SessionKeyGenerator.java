@@ -1,9 +1,5 @@
 package ntagwriter.crypto;
 
-import org.bouncycastle.crypto.BlockCipher;
-import org.bouncycastle.crypto.engines.AESEngine;
-import org.bouncycastle.crypto.macs.CMac;
-import org.bouncycastle.crypto.params.KeyParameter;
 import ntagwriter.util.HexUtils;
 
 /**
@@ -52,8 +48,8 @@ public class SessionKeyGenerator {
         byte[] sv2 = generateSV2(rndA, rndB);
 
         // 세션 키 생성 (PRF = AES-CMAC)
-        byte[] sesAuthENCKey = calculatePRF(authKey, sv1);
-        byte[] sesAuthMACKey = calculatePRF(authKey, sv2);
+        byte[] sesAuthENCKey = MacUtils.prfCmac(authKey, sv1);
+        byte[] sesAuthMACKey = MacUtils.prfCmac(authKey, sv2);
 
         return new byte[][] {sesAuthENCKey, sesAuthMACKey};
     }
@@ -143,32 +139,6 @@ public class SessionKeyGenerator {
         }
 
         return sv2;
-    }
-
-    /**
-     * PRF(Pseudo Random Function) 계산 - AES-CMAC 사용
-     * NIST SP 800-38B에 따른 CMAC 알고리즘
-     *
-     * @param key 인증 키 (Kx)
-     * @param data 입력 데이터 (SV1 또는 SV2)
-     * @return 16바이트 세션 키
-     */
-    private static byte[] calculatePRF(byte[] key, byte[] data) {
-        try {
-            BlockCipher cipher = new AESEngine();
-            CMac cmac = new CMac(cipher);
-            KeyParameter keyParam = new KeyParameter(key);
-
-            cmac.init(keyParam);
-            cmac.update(data, 0, data.length);
-
-            byte[] output = new byte[16]; // 128-bit key
-            cmac.doFinal(output, 0);
-
-            return output;
-        } catch (Exception e) {
-            throw new RuntimeException("PRF(AES-CMAC) 계산 실패: " + e.getMessage(), e);
-        }
     }
 
     /**

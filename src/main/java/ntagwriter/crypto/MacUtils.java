@@ -24,4 +24,18 @@ public final class MacUtils {
         }
         return truncated;
     }
+
+    /**
+     * PRF(K, SV) = AES-CMAC(K, SV)
+     *
+     * 데이터시트 9.1.7 절에 명시된 세션 키 생성용 PRF.
+     */
+    public static byte[] prfCmac(byte[] key, byte[] sessionVector) {
+        Objects.requireNonNull(key, "key");
+        Objects.requireNonNull(sessionVector, "sessionVector");
+        if (key.length != 16) {
+            throw new IllegalArgumentException("PRF 키는 16바이트 AES 키여야 합니다.");
+        }
+        return CmacCalculator.calculateCmac(key, sessionVector);
+    }
 }
