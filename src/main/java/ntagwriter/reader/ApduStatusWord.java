@@ -36,14 +36,22 @@ public enum ApduStatusWord {
     VERIFICATION_FAILED(0x6300, "VERIFICATION_FAILED", "검증에 실패했습니다.", false),
     ISO_MEMORY_FAILURE(0x6581, "MEMORY_FAILURE", "NVM 접근 중 메모리 오류가 발생했습니다.", false),
     WRONG_LENGTH(0x6700, "WRONG_LENGTH", "APDU 길이가 사양과 다릅니다.", false),
-    SECURITY_STATUS_NOT_SATISFIED(0x6982, "SECURITY_STATUS_NOT_SATISFIED", "보안 조건이 충족되지 않았습니다.", false),
-    CONDITIONS_OF_USE_NOT_SATISFIED(0x6985, "CONDITIONS_OF_USE_NOT_SATISFIED", "사용 조건이 충족되지 않았습니다.", false),
-    INCORRECT_PARAMETERS_IN_DATA(0x6A80, "INCORRECT_PARAMETERS_IN_DATA", "Data 필드 값이 잘못되었습니다.", false),
-    FILE_OR_APPLICATION_NOT_FOUND(0x6A82, "FILE_OR_APPLICATION_NOT_FOUND", "파일 또는 애플리케이션이 존재하지 않습니다.", false),
-    INCORRECT_P1P2(0x6A86, "INCORRECT_P1P2", "P1 혹은 P2 값이 잘못되었습니다.", false),
-    LC_INCONSISTENT_WITH_P1P2(0x6A87, "LC_INCONSISTENT_WITH_P1P2", "Lc 값이 P1/P2 조합과 일치하지 않습니다.", false),
-    WRONG_LE(0x6C00, "WRONG_LE", "Le 값이 잘못되었습니다.", false),
-    WRONG_LE_WITH_HINT(0x6C00, 0xFF00, "WRONG_LE_WITH_HINT", "Le 값이 잘못되었으며 SW2가 허용 길이를 제공합니다.", false) {
+    SECURITY_STATUS_NOT_SATISFIED(0x6982, "SECURITY_STATUS_NOT_SATISFIED",
+            "보안 조건이 충족되지 않았습니다.", false),
+    CONDITIONS_OF_USE_NOT_SATISFIED(0x6985, "CONDITIONS_OF_USE_NOT_SATISFIED",
+            "사용 조건이 충족되지 않았습니다.", false),
+    INCORRECT_PARAMETERS_IN_DATA(0x6A80, "INCORRECT_PARAMETERS_IN_DATA",
+            "Data 필드 값이 잘못되었습니다.", false),
+    FILE_OR_APPLICATION_NOT_FOUND(0x6A82, "FILE_OR_APPLICATION_NOT_FOUND",
+            "파일 또는 애플리케이션이 존재하지 않습니다.", false),
+    INCORRECT_P1P2(0x6A86, "INCORRECT_P1P2",
+            "P1 혹은 P2 값이 잘못되었습니다.", false),
+    LC_INCONSISTENT_WITH_P1P2(0x6A87, "LC_INCONSISTENT_WITH_P1P2",
+            "Lc 값이 P1/P2 조합과 일치하지 않습니다.", false),
+    WRONG_LE(0x6C00, "WRONG_LE",
+            "Le 값이 잘못되었습니다.", false),
+    WRONG_LE_WITH_HINT(0x6C00, 0xFF00, "WRONG_LE_WITH_HINT",
+            "Le 값이 잘못되었으며 SW2가 허용 길이를 제공합니다.", false) {
         @Override
         public String formatDescription(int sw) {
             int expectedLength = sw & 0xFF;

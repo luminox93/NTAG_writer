@@ -11,7 +11,9 @@ public enum NtagDefaultConfig {
      * walkd.co.kr 프로젝트용 기본 설정
      */
     WALKD_PRODUCTION(
-        "https://challenge.walkd.co.kr/dashboard?enc=00000000000000000000000000000000&cmac=0000000000000000",
+        "https://challenge.walkd.co.kr/dashboard?" +
+        "enc=00000000000000000000000000000000&" +
+        "cmac=0000000000000000",
         (byte) 0x0E,  // Read: Free access (0E)
         (byte) 0x00,  // Write: Key 0
         (byte) 0x00,  // ReadWrite: Key 0

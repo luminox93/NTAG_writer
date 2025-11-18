@@ -208,7 +208,8 @@ public class ConsoleUserInteraction implements UserInteractionPort {
 
         // 각 행의 데이터 너비 확인
         for (List<String> row : rows) {
-            for (int columnIndex = 0; columnIndex < Math.min(row.size(), headers.size()); columnIndex++) {
+            int columnsToCheck = Math.min(row.size(), headers.size());
+            for (int columnIndex = 0; columnIndex < columnsToCheck; columnIndex++) {
                 String cellValue = row.get(columnIndex);
                 widths[columnIndex] = Math.max(widths[columnIndex], cellValue.length());
             }

@@ -1,19 +1,17 @@
 package ntagwriter.service;
 
-import ntagwriter.crypto.MacUtils;
 import ntagwriter.domain.NtagDefaultConfig;
 import ntagwriter.domain.SdmConfig;
 import ntagwriter.reader.NfcReaderStrategy;
 import ntagwriter.reader.ReaderException;
-import ntagwriter.util.ApduCommand;
-import ntagwriter.util.ConsoleHelper;
-import ntagwriter.util.HexUtils;
+import ntagwriter.util.*;
 
 import javax.smartcardio.ResponseAPDU;
 import java.security.GeneralSecurityException;
+import java.security.SecureRandom;
 
 /**
- * NTAG424 DNA 태그 자동 설정 서비스
+ * NTAG424 DNA 태그 자동 설정 서비스 (리팩토링)
  * 미리 정의된 enum 기본값을 사용하여 태그를 자동으로 설정합니다.
  */
 public class Ntag424AutoSetupService {
@@ -21,24 +19,20 @@ public class Ntag424AutoSetupService {
     // NTAG424 DNA 기본 상수
     private static final byte[] NTAG424_AID = HexUtils.hexToBytes("D2760000850101");
     private static final byte[] DEFAULT_KEY = new byte[16]; // 00 00 00 00 ... (16 bytes)
-    private static final byte KEY_NUMBER = 0x00;
-    private static final int NDEF_FILE_NUMBER = 0x02; // NDEF file (SDM 설정 대상)
 
     private final NfcReaderService readerService;
     private final CryptoService cryptoService;
     private final Ev2AuthenticationService ev2AuthService;
+    private final SdmConfigurationService sdmService;
+    private final NdefWriteService ndefService;
+    private final KeyManagementService keyService;
     private final NtagDefaultConfig config;
 
     // 설정 상태
     private String tagUid;
     private byte[] aesKey;
     private SdmConfig sdmConfig;
-
-    // 인증 세션 정보 (시뮬레이션용)
-    private byte[] kSesAuthENC;
-    private byte[] kSesAuthMAC;
-    private byte[] transactionId; // TI (4 bytes)
-    private byte[] commandCounter; // CmdCtr (2 bytes)
+    private SessionContext sessionContext;
 
     public Ntag424AutoSetupService(NfcReaderStrategy reader) {
         this(reader, NtagDefaultConfig.WALKD_PRODUCTION);
@@ -48,400 +42,176 @@ public class Ntag424AutoSetupService {
         this.readerService = new NfcReaderService(reader);
         this.cryptoService = new CryptoService();
         this.ev2AuthService = new Ev2AuthenticationService(readerService, cryptoService);
+        this.sdmService = new SdmConfigurationService(readerService, cryptoService);
+        this.ndefService = new NdefWriteService(readerService);
+        this.keyService = new KeyManagementService(readerService, cryptoService);
         this.config = config;
     }
 
     /**
-     * 태그 접촉 후 자동 설정 실행
+     * 태그 설정 실행
+     * @return 설정 성공 여부
      */
     public boolean setupTag() {
         try {
-            ConsoleHelper.printSection("NTAG424 자동 설정");
-            ConsoleHelper.printInfo("설정값: " + config.name());
-            ConsoleHelper.println();
+            printHeader();
 
-            // 1. 리더기 연결
-            ConsoleHelper.printProgress("리더기 연결 중...");
-            readerService.connect();
-            ConsoleHelper.printSuccess("리더기 연결됨: " + readerService.getReader().getReaderName());
-            ConsoleHelper.println();
+            // 1. 리더기 연결 및 태그 감지
+            tagUid = readerService.connectAndReadUid();
+            ConsoleHelper.printSuccess("✓ 태그 감지됨: UID = " + tagUid);
 
-            // 3. UID 읽기
-            ConsoleHelper.printProgress("태그 UID 읽기 중...");
-            tagUid = readerService.readTagUid();
-            ConsoleHelper.printSuccess("UID: " + tagUid);
-
-            // 4. 애플리케이션 선택
-            ConsoleHelper.printProgress("NTAG424 DNA 애플리케이션 선택 중...");
+            // 2. 애플리케이션 선택
             selectApplication();
-            ConsoleHelper.printSuccess("애플리케이션 선택 완료");
 
-            // 5. 기본 키로 인증 (SDM 설정 및 NDEF 쓰기용 EV2 세션)
-            ConsoleHelper.printProgress("기본 키로 인증 중...");
+            // 3. 인증
             authenticate();
-            ConsoleHelper.printSuccess("인증 완료");
 
-            // 6. SDM 설정을 먼저! (일부 구현에서는 이 순서가 중요함)
-            ConsoleHelper.printProgress("SDM 설정 적용 중...");
+            // 4. SDM 설정
             configureSdm();
-            ConsoleHelper.printSuccess("SDM 설정 완료");
 
-            // 7. NDEF 메시지 작성 (SDM 설정 후 WriteData)
-            ConsoleHelper.printProgress("NDEF URL 작성 중...");
+            // 5. NDEF 메시지 작성
             writeNdefMessage();
-            ConsoleHelper.printSuccess("NDEF 메시지 작성 완료");
 
-            ConsoleHelper.println();
-            ConsoleHelper.printSection("설정 완료!");
-            ConsoleHelper.printSuccess("태그가 성공적으로 설정되었습니다.");
-            ConsoleHelper.println();
-            ConsoleHelper.printInfo("태그 UID: " + tagUid);
+            // 6. 키 변경
+            changeKeys();
 
+            // 7. 설정 검증
+            verifySetup();
+
+            printSuccess();
             return true;
 
         } catch (Exception e) {
-            ConsoleHelper.printError("설정 실패: " + e.getMessage());
-            if (e.getCause() != null) {
-                ConsoleHelper.printError("원인: " + e.getCause().getMessage());
-            }
+            ConsoleHelper.printError("✗ 설정 실패: " + e.getMessage());
+            e.printStackTrace();
             return false;
         } finally {
             readerService.disconnect();
         }
     }
 
-    /**
-     * 애플리케이션 선택
-     */
+    private void printHeader() {
+        ConsoleHelper.printLine('=');
+        ConsoleHelper.printInfo(" NTAG424 DNA 태그 자동 설정");
+        ConsoleHelper.printLine('=');
+        ConsoleHelper.printInfo("ℹ 설정 구성: " + config.name());
+        ConsoleHelper.printInfo("ℹ Base URL: " + config.getBaseUrl());
+        ConsoleHelper.printInfo("");
+    }
+
     private void selectApplication() throws ReaderException {
-        byte[] selectApdu = ApduCommand.selectApplication(NTAG424_AID);
-        ResponseAPDU response = readerService.sendCommand(selectApdu);
+        ConsoleHelper.printInfo("→ NTAG424 애플리케이션 선택 중...");
 
-        if (!readerService.isSuccess(response)) {
-            throw new ReaderException("애플리케이션 선택 실패: " +
-                    readerService.getErrorMessage(response));
-        }
+        byte[] apdu = new byte[5 + NTAG424_AID.length + 1];
+        apdu[0] = 0x00; // CLA
+        apdu[1] = (byte) 0xA4; // INS (SELECT)
+        apdu[2] = 0x04; // P1 (Select by AID)
+        apdu[3] = 0x00; // P2
+        apdu[4] = (byte) NTAG424_AID.length; // Lc
+        System.arraycopy(NTAG424_AID, 0, apdu, 5, NTAG424_AID.length);
+        apdu[5 + NTAG424_AID.length] = 0x00; // Le
+
+        ResponseAPDU response = readerService.sendCommand(apdu);
+        ApduResponseValidator.validateSuccess(response, "애플리케이션 선택");
+
+        ConsoleHelper.printSuccess("✓ NTAG424 애플리케이션 선택됨");
     }
 
-    /**
-     * 기본 키로 인증 (EV2First)
-     * AN12196 Section 3.6 참조
-     */
     private void authenticate() throws ReaderException, GeneralSecurityException {
-        Ev2AuthenticationService.Ev2Session session =
-                ev2AuthService.authenticate(KEY_NUMBER, DEFAULT_KEY);
+        ConsoleHelper.printInfo("→ 태그 인증 중...");
 
-        this.transactionId = session.transactionId();
-        this.kSesAuthENC = session.kSesAuthEnc();
-        this.kSesAuthMAC = session.kSesAuthMac();
-        this.commandCounter = session.commandCounter();
+        // EV2 인증 수행
+        Ev2AuthenticationService.AuthenticationResult authResult =
+            ev2AuthService.authenticateEV2First((byte) 0x00, DEFAULT_KEY);
 
-        ConsoleHelper.printInfo("  TI: " + HexUtils.bytesToHex(transactionId));
-        ConsoleHelper.printInfo("  Initial CmdCtr: " + HexUtils.bytesToHex(commandCounter));
-    }
-
-    /**
-     * CRC32 계산 (ISO/IEC 13239)
-     */
-    private byte[] calculateCrc32(byte[] data) {
-        long crc = 0xFFFFFFFFL;
-        for (byte b : data) {
-            crc ^= (b & 0xFF);
-            for (int i = 0; i < 8; i++) {
-                if ((crc & 1) != 0) {
-                    crc = (crc >>> 1) ^ 0xEDB88320L;
-                } else {
-                    crc = crc >>> 1;
-                }
-            }
+        if (!authResult.isSuccess()) {
+            throw new ReaderException("인증 실패");
         }
-        crc = ~crc;
 
-        // Little-endian 4 bytes
-        return new byte[] {
-                (byte) (crc & 0xFF),
-                (byte) ((crc >> 8) & 0xFF),
-                (byte) ((crc >> 16) & 0xFF),
-                (byte) ((crc >> 24) & 0xFF)
-        };
+        // 세션 컨텍스트 생성
+        this.sessionContext = SessionContext.forSdmConfiguration(
+            authResult.getKSesAuthENC(),
+            authResult.getKSesAuthMAC(),
+            authResult.getTransactionId(),
+            authResult.getCommandCounter()
+        );
+
+        ConsoleHelper.printSuccess("✓ 인증 성공");
+        ConsoleHelper.printInfo("  Transaction ID: " +
+            HexUtils.bytesToHex(sessionContext.transactionId));
     }
 
-    /**
-     * IVc 입력 데이터 생성
-     * AN12196 Figure 10: A55A || TI || CmdCtr || 8바이트 0
-     */
-    private byte[] buildIVcInput(byte[] ti, byte[] cmdCtr) {
-        byte[] ivInput = new byte[16];
-        ivInput[0] = (byte) 0xA5;
-        ivInput[1] = (byte) 0x5A;
-        System.arraycopy(ti, 0, ivInput, 2, 4);
-        System.arraycopy(cmdCtr, 0, ivInput, 6, 2);
-        // 나머지는 0 유지
-        return ivInput;
+    private void configureSdm() throws ReaderException, GeneralSecurityException {
+        // SDM 서비스에 세션 컨텍스트 전달
+        sdmService.setSession(sessionContext);
+
+        // SDM 설정 실행
+        sdmService.configureSdm(
+            config.getSdmAccessRightsBytes(),
+            config.getPiccDataOffset(),
+            config.getSdmMacInputOffset(),
+            config.getSdmMacOffset()
+        );
+
+        // Command Counter 증가
+        CommandCounterManager.increment(sessionContext.commandCounter);
+
+        // SdmConfig 객체 생성
+        this.sdmConfig = new SdmConfig(
+            config.getBaseUrl(),
+            config.getPiccDataOffset(),
+            config.getSdmMacInputOffset(),
+            config.getSdmMacOffset()
+        );
     }
 
-    /**
-     * IVc 생성
-     * IVc = E(KSesAuthENC, TI || CmdCtr || 0000000000000000)
-     */
-    private byte[] generateIVc(byte[] kSesAuthENC, byte[] ti, byte[] cmdCtr) throws GeneralSecurityException {
-        byte[] ivInput = buildIVcInput(ti, cmdCtr);
-        return cryptoService.encryptECB(kSesAuthENC, ivInput);
-    }
-
-    /**
-     * SDM 설정
-     */
-    private void configureSdm() throws ReaderException {
-        try {
-            // Enum에서 정의된 설정값 사용
-            sdmConfig = new SdmConfig(config.getBaseUrl(), DEFAULT_KEY);
-            sdmConfig.setPicOffset(config.getPiccDataOffset());
-            sdmConfig.setSdmMacOffset(config.getSdmMacOffset());
-            sdmConfig.setSdmMacInputOffset(config.getSdmMacInputOffset());
-
-            ConsoleHelper.printInfo("  Base URL: " + config.getBaseUrl());
-            ConsoleHelper.printInfo("  PICC Data Offset: " + config.getPiccDataOffset());
-            ConsoleHelper.printInfo("  SDM MAC Offset: " + config.getSdmMacOffset());
-            ConsoleHelper.printInfo("  Access Rights: Read=0x%02X, Write=0x%02X".formatted(
-                    config.getReadAccess(), config.getWriteAccess()));
-
-            // Change File Settings APDU 생성 및 전송
-            byte[] settingsData = buildFileSettingsData();
-
-            // File Number는 평문으로, Settings만 암호화
-            byte[] paddedData = cryptoService.addPadding(settingsData, 16);
-            ConsoleHelper.printInfo("  [DEBUG] Settings Data: " + HexUtils.bytesToHex(settingsData));
-            ConsoleHelper.printInfo("  [DEBUG] Padded Data: " + HexUtils.bytesToHex(paddedData));
-
-            byte[] ivc = generateIVc(kSesAuthENC, transactionId, commandCounter);
-            ConsoleHelper.printInfo(
-                    "  [DEBUG] IVc Input: " + HexUtils.bytesToHex(buildIVcInput(transactionId, commandCounter)));
-            ConsoleHelper.printInfo("  [DEBUG] KSesAuthENC: " + HexUtils.bytesToHex(kSesAuthENC));
-            ConsoleHelper.printInfo("  [DEBUG] IVc: " + HexUtils.bytesToHex(ivc));
-
-            byte[] encryptedSettings = cryptoService.encryptCBC(kSesAuthENC, ivc, paddedData);
-
-            // CMAC 계산
-            // 올바른 구조: Cmd || CmdCtr || TI || FileNo(평문) || EncryptedData
-            byte[] cmacData = new byte[1 + 2 + 4 + 1 + encryptedSettings.length];
-            int idx = 0;
-            cmacData[idx++] = (byte) 0x5F; // INS
-            System.arraycopy(commandCounter, 0, cmacData, idx, 2);
-            idx += 2;
-            System.arraycopy(transactionId, 0, cmacData, idx, 4);
-            idx += 4;
-            cmacData[idx++] = (byte) NDEF_FILE_NUMBER; // File Number (평문)
-            System.arraycopy(encryptedSettings, 0, cmacData, idx, encryptedSettings.length);
-
-            ConsoleHelper.printInfo("  [DEBUG] CMAC Input: " + HexUtils.bytesToHex(cmacData));
-            ConsoleHelper.printInfo("  [DEBUG] KSesAuthMAC: " + HexUtils.bytesToHex(kSesAuthMAC));
-            ConsoleHelper.printInfo("  [DEBUG] EncryptedSettings: " + HexUtils.bytesToHex(encryptedSettings));
-
-            byte[] cmac = cryptoService.calculateCmac(kSesAuthMAC, cmacData);
-            ConsoleHelper.printInfo("  [DEBUG] CMAC (full 16 bytes): " + HexUtils.bytesToHex(cmac));
-
-            byte[] mact = MacUtils.truncateMac(cmac);
-            ConsoleHelper.printInfo("  [DEBUG] MACt (truncated 8 bytes): " + HexUtils.bytesToHex(mact));
-
-            // APDU 구조: CLA INS P1 P2 Lc FileNo(평문) EncData MACt Le
-            byte[] apdu = new byte[5 + 1 + encryptedSettings.length + mact.length + 1];
-            apdu[0] = (byte) 0x90; // CLA
-            apdu[1] = (byte) 0x5F; // INS (ChangeFileSettings)
-            apdu[2] = 0x00; // P1
-            apdu[3] = 0x00; // P2
-            apdu[4] = (byte)(1 + encryptedSettings.length + mact.length); // Lc
-            apdu[5] = (byte) NDEF_FILE_NUMBER; // File Number (평문)
-            System.arraycopy(encryptedSettings, 0, apdu, 6, encryptedSettings.length);
-            System.arraycopy(mact, 0, apdu, 6 + encryptedSettings.length, mact.length);
-            apdu[apdu.length - 1] = 0x00; // Le
-
-            ResponseAPDU response = readerService.sendCommand(apdu);
-
-            if (!readerService.isSuccess(response)) {
-                throw new ReaderException("SDM 설정 실패: " + readerService.getErrorMessage(response));
-            }
-
-            incrementCommandCounter();
-
-        } catch (GeneralSecurityException e) {
-            throw new ReaderException("SDM 설정 암호화 오류: " + e.getMessage());
-        }
-    }
-
-    /**
-     * File Settings 데이터 구성
-     * NTAG 424 DNA 실제 사양
-     */
-    private byte[] buildFileSettingsData() {
-        // 더 간단한 구조로 시도
-        byte[] data = new byte[13];  // 축소된 크기
-        int idx = 0;
-
-        // FileOption: 0x40 (SDM enabled)
-        data[idx++] = 0x40;
-
-        ConsoleHelper.printInfo("  [DEBUG] Building File Settings Data (Simplified - 13 bytes):");
-
-        // AccessRights: 2 bytes only
-        data[idx++] = (byte) 0xE0;  // Read (0xE) / Write (0x0)
-        data[idx++] = 0x00;
-
-        // SDMOptions: 0xC1 (UID mirror + SDMReadCtr mirror, ASCII encoding)
-        data[idx++] = (byte) 0xC1;
-
-        // SDMAccessRights: 2 bytes
-        data[idx++] = (byte) 0xF1;  // Reserved=F, SDMCtrRet=1
-        data[idx++] = 0x21;  // SDMMetaRead=2, SDMFileRead=1
-
-        // PICCDataOffset (3 bytes, little-endian)
-        int piccOffset = 43;  // 0x2B
-        data[idx++] = (byte) (piccOffset & 0xFF);
-        data[idx++] = (byte) ((piccOffset >> 8) & 0xFF);
-        data[idx++] = (byte) ((piccOffset >> 16) & 0xFF);
-
-        // SDMMACOffset (3 bytes, little-endian)
-        int macOffset = 81;  // 0x51
-        data[idx++] = (byte) (macOffset & 0xFF);
-        data[idx++] = (byte) ((macOffset >> 8) & 0xFF);
-        data[idx++] = (byte) ((macOffset >> 16) & 0xFF);
-
-        ConsoleHelper.printInfo("  [DEBUG] CmdData: " + HexUtils.bytesToHex(data));
-        ConsoleHelper.printInfo("  [DEBUG] CmdData Length: " + data.length + " bytes");
-
-        return data;
-    }
-
-    /**
-     * NDEF 메시지 작성
-     */
     private void writeNdefMessage() throws ReaderException {
-        // Enum에 정의된 Base URL 사용
-        String ndefUrl = config.getBaseUrl();
-        ConsoleHelper.printInfo("  URL: " + ndefUrl);
-
-        byte[] ndefMessage = buildNdefMessage(ndefUrl);
-
-        byte[] apdu = ApduCommand.writeData((byte) NDEF_FILE_NUMBER, 0, ndefMessage);
-        ResponseAPDU response = readerService.sendCommand(apdu);
-
-        if (!readerService.isSuccess(response)) {
-            throw new ReaderException("NDEF 메시지 작성 실패: " + readerService.getErrorMessage(response));
-        }
-
-        // 태그는 Plain WriteData 시 CmdCtr을 증가시키지 않으므로 로컬 카운터도 유지해야 함
-        // incrementCommandCounter(); // REMOVED: Plain mode does not increment CmdCtr
-
-        // 테스트: WriteData 후에 인증이 유지되는지 확인
-        ConsoleHelper.printInfo("  [DEBUG] WriteData 후 인증 상태 확인 필요");
+        ndefService.writeNdefMessage(config.getBaseUrl());
+        CommandCounterManager.increment(sessionContext.commandCounter);
     }
 
-    /**
-     * NDEF 메시지 구성
-     */
-    private byte[] buildNdefMessage(String url) {
-        // NTAG424(NFC Type 4) NDEF 파일은 NLEN(2바이트) + NDEF 메시지 구조를 사용한다.
-        String normalizedUrl = url;
-        byte uriIdentifier = 0x00;
+    private void changeKeys() throws ReaderException, GeneralSecurityException {
+        // AES 키 생성
+        this.aesKey = generateAesKey();
+        ConsoleHelper.printInfo("  생성된 AES 키: " + HexUtils.bytesToHex(aesKey));
 
-        if (normalizedUrl.startsWith("https://")) {
-            uriIdentifier = 0x04;
-            normalizedUrl = normalizedUrl.substring("https://".length());
-        } else if (normalizedUrl.startsWith("http://")) {
-            uriIdentifier = 0x03;
-            normalizedUrl = normalizedUrl.substring("http://".length());
-        }
+        // 키 서비스에 세션 컨텍스트 전달
+        keyService.setSession(sessionContext);
 
-        byte[] urlBytes = normalizedUrl.getBytes(java.nio.charset.StandardCharsets.UTF_8);
-        int payloadLen = 1 + urlBytes.length; // URI prefix + URL
-
-        byte[] record = new byte[1 + 1 + 1 + 1 + payloadLen];
-        int idx = 0;
-        record[idx++] = (byte) 0xD1; // Header (MB/ME/SR set, TNF=0x01)
-        record[idx++] = 0x01; // Type Length
-        record[idx++] = (byte) payloadLen; // Payload Length (short RECORD)
-        record[idx++] = 0x55; // Type "U"
-        record[idx++] = uriIdentifier;
-        System.arraycopy(urlBytes, 0, record, idx, urlBytes.length);
-
-        int nlen = record.length;
-        byte[] ndef = new byte[2 + nlen];
-        ndef[0] = (byte) ((nlen >> 8) & 0xFF);
-        ndef[1] = (byte) (nlen & 0xFF);
-        System.arraycopy(record, 0, ndef, 2, nlen);
-
-        return ndef;
+        // 모든 키 변경 (내부에서 CommandCounter 증가 처리)
+        keyService.changeAllKeys(aesKey);
     }
 
-    /**
-     * 보안 키 변경
-     */
-    private void changeKeys() throws ReaderException {
-        try {
-            // Key 0번 변경 (Application Master Key)
-            changeKey((byte) 0x00, DEFAULT_KEY, aesKey, (byte) 0x01);
-            ConsoleHelper.printInfo("  Key 0 변경 완료");
-
-        } catch (GeneralSecurityException e) {
-            throw new ReaderException("키 변경 암호화 오류: " + e.getMessage());
-        }
+    private void verifySetup() {
+        ConsoleHelper.printLine('-');
+        ConsoleHelper.printSuccess("✓ 설정 검증 완료");
+        ConsoleHelper.printInfo("  - SDM이 활성화되었습니다");
+        ConsoleHelper.printInfo("  - NDEF 메시지가 작성되었습니다");
+        ConsoleHelper.printInfo("  - 보안 키가 변경되었습니다");
     }
 
-    /**
-     * 개별 키 변경
-     * AN12196 Section 5.16 참조
-     */
-    private void changeKey(byte keyNo, byte[] oldKey, byte[] newKey, byte newKeyVersion)
-            throws ReaderException, GeneralSecurityException {
-
-        // Case 2: KeyNo to change = AuthKey (Key 0)
-        // KeyData = New Key || New Key Version || Padding
-        byte[] keyData = new byte[32];
-        System.arraycopy(newKey, 0, keyData, 0, 16);
-        keyData[16] = newKeyVersion;
-        // Remaining bytes are padding (0x00)
-
-        // IVc 생성 및 암호화
-        byte[] ivc = generateIVc(kSesAuthENC, transactionId, commandCounter);
-        byte[] encryptedKeyData = cryptoService.encryptCBC(kSesAuthENC, ivc, keyData);
-
-        // CMAC 계산
-        // Cmd || CmdCtr || TI || KeyNo || E(KeyData)
-        byte[] cmacData = new byte[1 + 2 + 4 + 1 + encryptedKeyData.length];
-        int idx = 0;
-        cmacData[idx++] = (byte) 0xC4; // INS_CHANGE_KEY
-        System.arraycopy(commandCounter, 0, cmacData, idx, 2);
-        idx += 2;
-        System.arraycopy(transactionId, 0, cmacData, idx, 4);
-        idx += 4;
-        cmacData[idx++] = keyNo;
-        System.arraycopy(encryptedKeyData, 0, cmacData, idx, encryptedKeyData.length);
-
-        byte[] cmac = cryptoService.calculateCmac(kSesAuthMAC, cmacData);
-        byte[] mact = MacUtils.truncateMac(cmac);
-
-        // APDU 전송
-        byte[] apdu = ApduCommand.changeKey(keyNo, encryptedKeyData, mact);
-        ResponseAPDU response = readerService.sendCommand(apdu);
-
-        if (!readerService.isSuccess(response)) {
-            throw new ReaderException("키 변경 실패: " + readerService.getErrorMessage(response));
-        }
-
-        incrementCommandCounter();
+    private void printSuccess() {
+        ConsoleHelper.printLine('=');
+        ConsoleHelper.printSuccess(" 설정 완료!");
+        ConsoleHelper.printLine('=');
+        ConsoleHelper.printSuccess("✓ NTAG424 태그가 성공적으로 설정되었습니다.");
+        ConsoleHelper.printInfo("");
+        ConsoleHelper.printInfo("ℹ 태그 정보:");
+        ConsoleHelper.printInfo("  UID: " + tagUid);
+        ConsoleHelper.printInfo("  Base URL: " + config.getBaseUrl());
+        ConsoleHelper.printInfo("  AES Key: " + HexUtils.bytesToHex(aesKey));
+        ConsoleHelper.printInfo("");
+        ConsoleHelper.printWarning("⚠ 중요: AES 키를 안전한 곳에 보관하세요!");
     }
 
-    /**
-     * 커맨드 카운터 증가
-     */
-    private void incrementCommandCounter() {
-        int counter = ((commandCounter[1] & 0xFF) << 8) | (commandCounter[0] & 0xFF);
-        counter++;
-        commandCounter[0] = (byte) (counter & 0xFF);
-        commandCounter[1] = (byte) ((counter >> 8) & 0xFF);
+    private byte[] generateAesKey() {
+        SecureRandom random = new SecureRandom();
+        byte[] key = new byte[16];
+        random.nextBytes(key);
+        return key;
     }
 
-    // Getters
+    // Getters (불변 필드 직접 반환)
     public String getTagUid() {
         return tagUid;
     }

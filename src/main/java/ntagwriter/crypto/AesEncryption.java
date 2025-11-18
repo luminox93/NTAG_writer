@@ -55,7 +55,8 @@ public class AesEncryption {
      * @return 암호화된 데이터
      * @throws GeneralSecurityException 암호화 실패 시
      */
-    public static byte[] encryptCBC(byte[] key, byte[] iv, byte[] data) throws GeneralSecurityException {
+    public static byte[] encryptCBC(byte[] key, byte[] iv, byte[] data)
+            throws GeneralSecurityException {
         SecretKeySpec secretKey = new SecretKeySpec(key, ALGORITHM);
         IvParameterSpec ivSpec = new IvParameterSpec(iv);
         Cipher cipher = Cipher.getInstance(TRANSFORMATION_CBC);
@@ -72,7 +73,8 @@ public class AesEncryption {
      * @return 복호화된 데이터
      * @throws GeneralSecurityException 복호화 실패 시
      */
-    public static byte[] decryptCBC(byte[] key, byte[] iv, byte[] data) throws GeneralSecurityException {
+    public static byte[] decryptCBC(byte[] key, byte[] iv, byte[] data)
+            throws GeneralSecurityException {
         SecretKeySpec secretKey = new SecretKeySpec(key, ALGORITHM);
         IvParameterSpec ivSpec = new IvParameterSpec(iv);
         Cipher cipher = Cipher.getInstance(TRANSFORMATION_CBC);

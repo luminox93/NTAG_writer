@@ -42,7 +42,9 @@ public class IdentivReader implements NfcReaderStrategy {
             // identiv를 못 찾으면 첫 번째 리더기 사용
             if (terminal == null) {
                 terminal = terminals.get(0);
-                ConsoleHelper.printWarning("identiv uTrust 3700 F를 찾을 수 없어 '" + terminal.getName() + "' 리더기를 사용합니다.");
+                ConsoleHelper.printWarning(
+                        "identiv uTrust 3700 F를 찾을 수 없어 '" +
+                        terminal.getName() + "' 리더기를 사용합니다.");
             }
 
             // 태그가 올라올 때까지 대기
