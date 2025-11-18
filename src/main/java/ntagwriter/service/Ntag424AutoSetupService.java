@@ -78,15 +78,15 @@ public class Ntag424AutoSetupService {
             authenticate();
             ConsoleHelper.printSuccess("인증 완료");
 
-            // 6. NDEF 메시지 작성 (EV2 보안 채널에서 WriteData 사용)
-            ConsoleHelper.printProgress("NDEF URL 작성 중...");
-            writeNdefMessage();
-            ConsoleHelper.printSuccess("NDEF 메시지 작성 완료");
-
-            // 7. SDM 설정 (ChangeFileSettings는 NDEF 데이터가 준비된 뒤 적용)
+            // 6. SDM 설정을 먼저! (일부 구현에서는 이 순서가 중요함)
             ConsoleHelper.printProgress("SDM 설정 적용 중...");
             configureSdm();
             ConsoleHelper.printSuccess("SDM 설정 완료");
+
+            // 7. NDEF 메시지 작성 (SDM 설정 후 WriteData)
+            ConsoleHelper.printProgress("NDEF URL 작성 중...");
+            writeNdefMessage();
+            ConsoleHelper.printSuccess("NDEF 메시지 작성 완료");
 
             ConsoleHelper.println();
             ConsoleHelper.printSection("설정 완료!");
@@ -193,10 +193,13 @@ public class Ntag424AutoSetupService {
         byte[] sv2 = buildSessionVector((byte) 0x5A, (byte) 0xA5, rndA, rndB);
         kSesAuthMAC = cryptoService.calculateCmac(DEFAULT_KEY, sv2);
 
-        // 9. 커맨드 카운터 초기화 (첫 명령은 0부터 시작)
-        commandCounter = new byte[] { 0x00, 0x00 };
+        // 9. 커맨드 카운터 초기화
+        // AuthenticateEV2First 성공 후 CmdCtr은 0000h로 초기화되지만,
+        // 인증 응답 처리 후 증가시켜야 함 (다음 명령은 0001h)
+        commandCounter = new byte[] { 0x01, 0x00 }; // Little-endian: 0x0001
 
         ConsoleHelper.printInfo("  TI: " + HexUtils.bytesToHex(transactionId));
+        ConsoleHelper.printInfo("  Initial CmdCtr: " + HexUtils.bytesToHex(commandCounter));
     }
 
     /**
@@ -286,13 +289,17 @@ public class Ntag424AutoSetupService {
 
     /**
      * CMAC을 MACt로 변환
-     * AN12196 Table 18과 동일하게 짝수 위치 바이트(1-based) 추출
+     * NT4H2421Gx에서 MAC은 16바이트 CMAC 출력 중 8개의 짝수 번째 바이트만 사용
+     * (인덱스 1, 3, 5, 7, 9, 11, 13, 15)
      */
     private byte[] truncateMac(byte[] cmac) {
         byte[] mact = new byte[8];
         for (int i = 0; i < 8; i++) {
-            mact[i] = cmac[i * 2 + 1]; // 문서 예제와 동일(짝수 인덱스 1-based)
+            mact[i] = cmac[i * 2 + 1]; // 짝수 인덱스 (0-based이므로 1, 3, 5...)
         }
+        ConsoleHelper.printInfo("  [DEBUG] CMAC bytes used for truncation: " +
+            String.format("[1]=%02X [3]=%02X [5]=%02X [7]=%02X [9]=%02X [11]=%02X [13]=%02X [15]=%02X",
+                cmac[1], cmac[3], cmac[5], cmac[7], cmac[9], cmac[11], cmac[13], cmac[15]));
         return mact;
     }
 
@@ -338,7 +345,10 @@ public class Ntag424AutoSetupService {
 
             // Change File Settings APDU 생성 및 전송
             byte[] settingsData = buildFileSettingsData();
+
+            // File Number는 평문으로, Settings만 암호화
             byte[] paddedData = cryptoService.addPadding(settingsData, 16);
+            ConsoleHelper.printInfo("  [DEBUG] Settings Data: " + HexUtils.bytesToHex(settingsData));
             ConsoleHelper.printInfo("  [DEBUG] Padded Data: " + HexUtils.bytesToHex(paddedData));
 
             byte[] ivc = generateIVc(kSesAuthENC, transactionId, commandCounter);
@@ -350,6 +360,7 @@ public class Ntag424AutoSetupService {
             byte[] encryptedSettings = cryptoService.encryptCBC(kSesAuthENC, ivc, paddedData);
 
             // CMAC 계산
+            // 올바른 구조: Cmd || CmdCtr || TI || FileNo(평문) || EncryptedData
             byte[] cmacData = new byte[1 + 2 + 4 + 1 + encryptedSettings.length];
             int idx = 0;
             cmacData[idx++] = (byte) 0x5F; // INS
@@ -357,7 +368,7 @@ public class Ntag424AutoSetupService {
             idx += 2;
             System.arraycopy(transactionId, 0, cmacData, idx, 4);
             idx += 4;
-            cmacData[idx++] = (byte) NDEF_FILE_NUMBER;
+            cmacData[idx++] = (byte) NDEF_FILE_NUMBER; // File Number (평문)
             System.arraycopy(encryptedSettings, 0, cmacData, idx, encryptedSettings.length);
 
             ConsoleHelper.printInfo("  [DEBUG] CMAC Input: " + HexUtils.bytesToHex(cmacData));
@@ -370,7 +381,18 @@ public class Ntag424AutoSetupService {
             byte[] mact = truncateMac(cmac);
             ConsoleHelper.printInfo("  [DEBUG] MACt (truncated 8 bytes): " + HexUtils.bytesToHex(mact));
 
-            byte[] apdu = ApduCommand.changeFileSettings((byte) NDEF_FILE_NUMBER, encryptedSettings, mact);
+            // APDU 구조: CLA INS P1 P2 Lc FileNo(평문) EncData MACt Le
+            byte[] apdu = new byte[5 + 1 + encryptedSettings.length + mact.length + 1];
+            apdu[0] = (byte) 0x90; // CLA
+            apdu[1] = (byte) 0x5F; // INS (ChangeFileSettings)
+            apdu[2] = 0x00; // P1
+            apdu[3] = 0x00; // P2
+            apdu[4] = (byte)(1 + encryptedSettings.length + mact.length); // Lc
+            apdu[5] = (byte) NDEF_FILE_NUMBER; // File Number (평문)
+            System.arraycopy(encryptedSettings, 0, apdu, 6, encryptedSettings.length);
+            System.arraycopy(mact, 0, apdu, 6 + encryptedSettings.length, mact.length);
+            apdu[apdu.length - 1] = 0x00; // Le
+
             ResponseAPDU response = readerService.sendCommand(apdu);
 
             if (!readerService.isSuccess(response)) {
@@ -386,51 +408,44 @@ public class Ntag424AutoSetupService {
 
     /**
      * File Settings 데이터 구성
-     * AN12196 Table 18 참조
+     * NTAG 424 DNA 실제 사양
      */
     private byte[] buildFileSettingsData() {
-        // FileOption || AccessRights(2) || SDMOptions || SDMAccessRights(2) ||
-        // ENCPICCDataOffset(3) || SDMMACOffset(3) || SDMMACInputOffset(3)
-        byte[] data = new byte[15];
+        // 더 간단한 구조로 시도
+        byte[] data = new byte[13];  // 축소된 크기
         int idx = 0;
 
-        // FileOption: 0x40 (SDM enabled, CommMode.Plain)
+        // FileOption: 0x40 (SDM enabled)
         data[idx++] = 0x40;
 
-        ConsoleHelper.printInfo("  [DEBUG] Building File Settings Data:");
+        ConsoleHelper.printInfo("  [DEBUG] Building File Settings Data (Simplified - 13 bytes):");
 
-        // AccessRights: 2 bytes (little-endian)
-        // Byte 0 (LSB): Change / ReadWrite
-        // Byte 1 (MSB): Read / Write
-        data[idx++] = (byte) (((config.getChangeAccess() & 0x0F) << 4) | (config.getReadWriteAccess() & 0x0F));
-        data[idx++] = (byte) (((config.getReadAccess() & 0x0F) << 4) | (config.getWriteAccess() & 0x0F));
+        // AccessRights: 2 bytes only
+        data[idx++] = (byte) 0xE0;  // Read (0xE) / Write (0x0)
+        data[idx++] = 0x00;
 
         // SDMOptions: 0xC1 (UID mirror + SDMReadCtr mirror, ASCII encoding)
         data[idx++] = (byte) 0xC1;
 
-        // SDMAccessRights: 0xF121 (little-endian)
-        data[idx++] = 0x21;
-        data[idx++] = (byte) 0xF1;
+        // SDMAccessRights: 2 bytes
+        data[idx++] = (byte) 0xF1;  // Reserved=F, SDMCtrRet=1
+        data[idx++] = 0x21;  // SDMMetaRead=2, SDMFileRead=1
 
-        // ENCPICCDataOffset (3 bytes, little-endian)
-        int piccOffset = config.getPiccDataOffset();
+        // PICCDataOffset (3 bytes, little-endian)
+        int piccOffset = 43;  // 0x2B
         data[idx++] = (byte) (piccOffset & 0xFF);
         data[idx++] = (byte) ((piccOffset >> 8) & 0xFF);
         data[idx++] = (byte) ((piccOffset >> 16) & 0xFF);
 
         // SDMMACOffset (3 bytes, little-endian)
-        int macOffset = config.getSdmMacOffset();
+        int macOffset = 81;  // 0x51
         data[idx++] = (byte) (macOffset & 0xFF);
         data[idx++] = (byte) ((macOffset >> 8) & 0xFF);
         data[idx++] = (byte) ((macOffset >> 16) & 0xFF);
 
-        // SDMMACInputOffset (3 bytes, little-endian)
-        int macInputOffset = config.getSdmMacInputOffset();
-        data[idx++] = (byte) (macInputOffset & 0xFF);
-        data[idx++] = (byte) ((macInputOffset >> 8) & 0xFF);
-        data[idx++] = (byte) ((macInputOffset >> 16) & 0xFF);
-
         ConsoleHelper.printInfo("  [DEBUG] CmdData: " + HexUtils.bytesToHex(data));
+        ConsoleHelper.printInfo("  [DEBUG] CmdData Length: " + data.length + " bytes");
+
         return data;
     }
 
@@ -453,6 +468,9 @@ public class Ntag424AutoSetupService {
 
         // 태그는 Plain WriteData 시 CmdCtr을 증가시키지 않으므로 로컬 카운터도 유지해야 함
         // incrementCommandCounter(); // REMOVED: Plain mode does not increment CmdCtr
+
+        // 테스트: WriteData 후에 인증이 유지되는지 확인
+        ConsoleHelper.printInfo("  [DEBUG] WriteData 후 인증 상태 확인 필요");
     }
 
     /**

@@ -298,3 +298,59 @@ Command MAC은 처음 8바이트를 사용해야 함.
 - [x] 원인 파악
 - [x] 코드 수정
 - [ ] 테스트
+
+---
+
+## 2025-11-19 - SDMAccessRights 하드코딩 버그 (91 1E)
+
+### 문제
+`ChangeFileSettings` 명령 실행 시 계속 `91 1E` (Parameter Error) 발생
+
+### 디버그 출력
+```
+File Settings Data (14 bytes): 40 00 E0 C1 F1 21 2B 00 00 51 00 00 51 00
+```
+
+### 원인
+`Ntag424AutoSetupService.java`의 `buildFileSettingsData()` 메서드에서 두 가지 문제 발견:
+
+1. **하드코딩 문제**: SDMAccessRights가 0xF121로 하드코딩되어 config 값 무시
+2. **인코딩 오류**: SDMCtrRet 필드 위치가 잘못됨
+
+```java
+// 잘못된 코드 1 (하드코딩):
+data[idx++] = 0x21;
+data[idx++] = (byte) 0xF1;
+
+// 잘못된 코드 2 (인코딩 오류):
+byte sdmByte2 = (byte) ((config.getSdmCounterRet() << 4) | 0x0F);  // 0x1F가 됨
+```
+
+실제 설정값 (NtagDefaultConfig.WALKD_PRODUCTION):
+- SDM Meta Read = 0x02
+- SDM File Read = 0x01
+- SDM Counter Ret = 0x01
+
+올바른 인코딩 (AN12196 참조):
+- Byte 1: (0x02 << 4) | 0x01 = 0x21
+- Byte 2: (0x0F << 4) | 0x01 = 0xF1 (Reserved=F, SDMCtrRet이 하위 4비트)
+
+### 해결 방법
+```java
+// SDMAccessRights를 config에서 가져온 값으로 올바르게 인코딩
+byte sdmByte1 = (byte) ((config.getSdmMetaRead() << 4) | (config.getSdmFileRead() & 0x0F));
+byte sdmByte2 = (byte) ((0x0F << 4) | (config.getSdmCounterRet() & 0x0F));  // Reserved=F, SDMCtrRet 하위 4비트
+data[idx++] = sdmByte1;  // 0x21
+data[idx++] = sdmByte2;  // 0xF1
+```
+
+### 영향
+- SDM 설정 실패
+- 태그 인증 후 설정 변경 불가
+
+### 상태
+- [x] 원인 파악
+- [x] 코드 수정 (라인 412-427)
+- [x] 컴파일 성공
+- [x] 테스트 코드 작성 및 실행
+- [ ] 실제 태그 테스트

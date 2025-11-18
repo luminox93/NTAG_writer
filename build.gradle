@@ -75,6 +75,27 @@ task runChangeFileSettingsExample(type: JavaExec) {
     mainClass = 'ntagwriter.debug.ChangeFileSettingsValidator'
 }
 
+task runSessionKeyTest(type: JavaExec) {
+    group = 'verification'
+    description = 'Tests NTAG 424 DNA Session Key Generation'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'ntagwriter.test.SessionKeyGeneratorTest'
+}
+
+task runAuthenticationTest(type: JavaExec) {
+    group = 'verification'
+    description = 'Tests NTAG 424 DNA Authentication Protocol & Secure Messaging'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'ntagwriter.test.AuthenticationTest'
+}
+
+task runNT4H2421GxProtocol(type: JavaExec) {
+    group = 'verification'
+    description = 'Tests NT4H2421Gx Complete Protocol Implementation'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'ntagwriter.crypto.NT4H2421GxProtocol'
+}
+
 test {
     useJUnitPlatform() // Enable JUnit 5
     testLogging {
