@@ -38,3 +38,4 @@ Thumbs.db
 # Output
 out/
 bin/
+resources/logs.txt
