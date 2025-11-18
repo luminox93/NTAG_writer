@@ -1,7 +1,6 @@
 plugins {
     id 'java'
     id 'application'
-    id 'org.openjfx.javafxplugin' version '0.0.13'
 }
 
 version = '1.0.0'
@@ -12,20 +11,12 @@ repositories {
     mavenCentral()
 }
 
-javafx {
-    version = "21.0.1"
-    modules = ['javafx.controls', 'javafx.fxml']
-}
-
 dependencies {
     // BouncyCastle for cryptography (AES-CMAC) - Updated for Java 21
     implementation 'org.bouncycastle:bcprov-jdk18on:1.78'
 
     // JSON processing
     implementation 'com.google.code.gson:gson:2.10.1'
-
-    // HTTP client - Using Java 11+ HttpClient (built-in)
-    // implementation 'org.apache.httpcomponents:httpclient:4.5.14' // Removed, using java.net.http
 
     // SQLite for local database
     implementation 'org.xerial:sqlite-jdbc:3.45.0.0'
@@ -59,41 +50,11 @@ task fatJar(type: Jar) {
     with jar
 }
 
-// Task to check Java version compatibility
-task checkJavaVersion {
-    doLast {
-        println "Java version: ${System.getProperty('java.version')}"
-        println "Source compatibility: ${sourceCompatibility}"
-        println "Target compatibility: ${targetCompatibility}"
-    }
-}
-
 task runChangeFileSettingsExample(type: JavaExec) {
     group = 'verification'
     description = 'Runs AN12196 ChangeFileSettings example validation.'
     classpath = sourceSets.main.runtimeClasspath
     mainClass = 'ntagwriter.debug.ChangeFileSettingsValidator'
-}
-
-task runSessionKeyTest(type: JavaExec) {
-    group = 'verification'
-    description = 'Tests NTAG 424 DNA Session Key Generation'
-    classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'ntagwriter.test.SessionKeyGeneratorTest'
-}
-
-task runAuthenticationTest(type: JavaExec) {
-    group = 'verification'
-    description = 'Tests NTAG 424 DNA Authentication Protocol & Secure Messaging'
-    classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'ntagwriter.test.AuthenticationTest'
-}
-
-task runNT4H2421GxProtocol(type: JavaExec) {
-    group = 'verification'
-    description = 'Tests NT4H2421Gx Complete Protocol Implementation'
-    classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'ntagwriter.crypto.NT4H2421GxProtocol'
 }
 
 test {
