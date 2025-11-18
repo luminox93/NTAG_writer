@@ -81,13 +81,37 @@ public class AesEncryption {
     }
 
     /**
-     * 데이터에 PKCS7 패딩 추가
+     * 데이터에 ISO/IEC 9797-1 Padding Method 2 추가
+     * NTAG424 DNA에서 사용하는 표준 패딩 방식
      *
      * @param data      원본 데이터
      * @param blockSize 블록 크기 (일반적으로 16)
      * @return 패딩이 추가된 데이터
      */
     public static byte[] addPadding(byte[] data, int blockSize) {
+        // 패딩이 필요한 바이트 수 계산
+        int remainder = data.length % blockSize;
+        int paddingLength = (remainder == 0) ? blockSize : (blockSize - remainder);
+
+        byte[] padded = new byte[data.length + paddingLength];
+        System.arraycopy(data, 0, padded, 0, data.length);
+
+        // ISO/IEC 9797-1 Method 2: 0x80 추가 후 나머지는 0x00
+        padded[data.length] = (byte) 0x80;
+        // 나머지는 이미 0x00으로 초기화됨
+
+        return padded;
+    }
+
+    /**
+     * 데이터에 PKCS7 패딩 추가 (레거시, 사용 안 함)
+     *
+     * @param data      원본 데이터
+     * @param blockSize 블록 크기 (일반적으로 16)
+     * @return 패딩이 추가된 데이터
+     */
+    @Deprecated
+    public static byte[] addPaddingPKCS7(byte[] data, int blockSize) {
         int paddingLength = blockSize - (data.length % blockSize);
         byte[] padded = new byte[data.length + paddingLength];
         System.arraycopy(data, 0, padded, 0, data.length);
